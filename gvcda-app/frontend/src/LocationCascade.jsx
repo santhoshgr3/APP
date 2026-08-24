@@ -12,6 +12,18 @@ export default function LocationCascade({ value, onChange }) {
 
   useEffect(() => { api.districts().then(setDistricts); }, []);
 
+  // Auto-select the first district once the list loads if the current value
+  // doesn't match a real one — mirrors the same pattern used below for
+  // mandal/village, so callers can pass district_id: null and not have to
+  // guess a real starting id (which isn't stable — Postgres sequences don't
+  // reset the way a fresh SQLite file's rowids would).
+  useEffect(() => {
+    if (!districts.length) return;
+    if (!districts.find((d) => d.district_id === value.district_id)) {
+      onChange({ ...value, district_id: districts[0].district_id, mandal_id: null, village_id: null });
+    }
+  }, [districts]);
+
   useEffect(() => {
     if (!value.district_id) return;
     api.mandals(value.district_id).then((m) => {

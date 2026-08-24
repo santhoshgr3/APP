@@ -97,7 +97,7 @@ function BookTab({ push, refreshKey }) {
 function EnrolForm({ onBack }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [loc, setLoc] = useState({ district_id: 1, mandal_id: 1, village_id: 1 });
+  const [loc, setLoc] = useState({ district_id: null, mandal_id: null, village_id: null });
   const [plans, setPlans] = useState(null);
   const [planId, setPlanId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -143,7 +143,7 @@ function ListRetailerForm({ onBack }) {
   const [phone, setPhone] = useState("");
   const [categories, setCategories] = useState(null);
   const [catId, setCatId] = useState(null);
-  const [loc, setLoc] = useState({ district_id: 1, mandal_id: 1, village_id: 1 });
+  const [loc, setLoc] = useState({ district_id: null, mandal_id: null, village_id: null });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { api.categories().then((c) => { setCategories(c); setCatId(c[0]?.category_id); }); }, []);
@@ -220,7 +220,7 @@ function VisitLogTab({ refreshKey, onAction }) {
   const [visits, setVisits] = useState(null);
   const [purpose, setPurpose] = useState("enrolment");
   const [notes, setNotes] = useState("");
-  const [loc, setLoc] = useState({ district_id: 1, mandal_id: 1, village_id: 1 });
+  const [loc, setLoc] = useState({ district_id: null, mandal_id: null, village_id: null });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 

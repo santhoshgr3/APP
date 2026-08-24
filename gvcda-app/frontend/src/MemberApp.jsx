@@ -451,7 +451,7 @@ function BecomeRetailer({ onBack, onDone }) {
   const [phone, setPhone] = useState("");
   const [categories, setCategories] = useState(null);
   const [catId, setCatId] = useState(null);
-  const [loc, setLoc] = useState({ district_id: 1, mandal_id: 1, village_id: 1 });
+  const [loc, setLoc] = useState({ district_id: null, mandal_id: null, village_id: null });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { api.categories().then((c) => { setCategories(c); setCatId(c[0]?.category_id); }); }, []);
