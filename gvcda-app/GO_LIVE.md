@@ -68,7 +68,26 @@ Either way, OTPs become real random 6-digit codes the moment a provider is
 configured (see `generateOtp()` in `routes/auth.js`) — the fixed `123456` is only
 ever used when nothing is configured.
 
-## 3. Hosting the backend — Render
+## 3. The database — Supabase Postgres
+
+The backend runs on Postgres, not SQLite — `backend/db.js` connects via
+`DATABASE_URL` and every route queries through `pg`. This means the backend
+itself is fully stateless (no local disk needed at all), so it can run on
+Render's **free** tier.
+
+1. In your [Supabase](https://supabase.com) project → **Settings → Database →
+   Connection string**, copy the **URI** (Session pooler works fine).
+2. Set `DATABASE_URL` to that string wherever the backend runs (see §4 below
+   for Render specifically).
+3. Schema creation is automatic — `db.js` runs `CREATE TABLE IF NOT EXISTS`
+   for everything on every boot, so there's no separate migration step.
+4. Seed demo data once: `npm run seed` (safe to re-run — it's a no-op once
+   `districts` has rows).
+
+Backups and point-in-time recovery are Supabase's job at that point — no
+Litestream/cron setup needed like a self-hosted SQLite file would require.
+
+## 4. Hosting the backend — Render
 
 The backend is a plain Express app (`backend/server.js`). This repo ships a
 `render.yaml` blueprint at the repo root pre-wired for it:
@@ -76,43 +95,33 @@ The backend is a plain Express app (`backend/server.js`). This repo ships a
 1. Push this repo to GitHub (already done — `github.com/santhoshgr3/APP`).
 2. In the [Render dashboard](https://dashboard.render.com), **New → Blueprint**,
    pick this repo. Render reads `render.yaml` and creates the `gvcda-backend`
-   web service on the **Starter** plan (~$7/mo — needed for the persistent disk
-   below; the free plan's disk is wiped on every restart/deploy, which would
-   silently reset your SQLite database).
+   web service on the **free** tier — no disk needed since the database lives
+   in Supabase.
 3. Render generates `JWT_SECRET` for you automatically (`generateValue: true`
    in the blueprint). Fill in the rest it left blank in the dashboard's
    Environment tab:
+   - `DATABASE_URL` → from §3 above
    - `CORS_ORIGIN` → your Vercel URL, e.g. `https://gvcda.vercel.app`
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET` → see §1a below
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET` → see §4a below
    - `MSG91_*` or `TWILIO_*` → only once you're ready for real SMS (see §2)
-4. First deploy: SSH in via Render's **Shell** tab and run `npm run seed` once
-   to create demo data on the fresh disk (`DB_PATH=/var/data/gvcda.db` is
-   already set for you by the blueprint) — or skip it and let the app start
-   with an empty database if you don't want the demo accounts in production.
 
 No blueprint? You can set this up by hand instead — connect the repo, set
 **Root Directory** to `gvcda-app/backend`, build command `npm install`, start
-command `npm start`, add a disk mounted at `/var/data`, and set `DB_PATH` to
-`/var/data/gvcda.db` plus the env vars above.
-
-**Database**: SQLite (current setup) is genuinely fine in production at this
-app's expected scale — it's not a toy choice — as long as the `.db` file lives on
-Render's **persistent disk** (set up by the blueprint) and you back it up. Use
-[Litestream](https://litestream.io/) to continuously stream backups to S3/GCS
-(or Supabase Storage) for free, or just cron a daily copy somewhere safe.
+command `npm start`, plus the env vars above.
 
 **Required env vars in production** (`backend/.env`, see `backend/.env.example`
 — all pre-filled by `render.yaml` if you used the blueprint):
 ```
 NODE_ENV=production
+DATABASE_URL=<your Supabase connection string>
 JWT_SECRET=<generate with: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
 CORS_ORIGIN=https://gvcda.vercel.app
 ```
-The backend **will refuse to boot** without `JWT_SECRET` in production, and will
-refuse to fake OTP/payments in production if you haven't configured a real
-provider — this is deliberate, so you can't accidentally ship the demo mode.
+The backend **will refuse to boot** without `DATABASE_URL` or `JWT_SECRET` in
+production, and will refuse to fake OTP/payments without a real provider
+configured — this is deliberate, so you can't accidentally ship the demo mode.
 
-### 3a. Photo storage — Supabase Storage
+### 4a. Photo storage — Supabase Storage
 
 Retailer storefront and product photos go through `backend/lib/uploads.js`,
 which has two modes:
@@ -136,21 +145,20 @@ To turn it on:
 That's the entire integration — no other code changes needed, and every route
 that touches photos already calls only the functions this one file exports.
 
-## 4. Hosting the web app — Vercel
-
-This repo ships a `vercel.json` at the repo root that points at `frontend/`
-inside the monorepo, so you can import the repo as-is without reconfiguring
-anything in the dashboard:
+## 5. Hosting the web app — Vercel
 
 1. In [Vercel](https://vercel.com), **Add New → Project**, import
-   `github.com/santhoshgr3/APP`. Leave the root directory as the repo root —
-   `vercel.json` handles the `cd gvcda-app/frontend` for you.
-2. Add one environment variable: `VITE_API_URL` → your Render backend URL,
+   `github.com/santhoshgr3/APP`.
+2. Set **Root Directory** to `gvcda-app/frontend` (this is a monorepo — Vercel
+   needs to know the actual app lives one level down). Leave the Build/Install/
+   Output Command overrides off — Vite's own defaults (`npm install`,
+   `npm run build`, `dist`) are correct once Root Directory is set.
+3. Add one environment variable: `VITE_API_URL` → your Render backend URL,
    e.g. `https://gvcda-backend.onrender.com`.
-3. Deploy. Then go back to Render and set `CORS_ORIGIN` to whatever domain
+4. Deploy. Then go back to Render and set `CORS_ORIGIN` to whatever domain
    Vercel gave you (or your custom domain once you attach one).
 
-## 5. Publishing the mobile app
+## 6. Publishing the mobile app
 
 The mobile app is Expo-managed — build and submit through
 [EAS](https://docs.expo.dev/eas/), no Mac required even for iOS:
@@ -180,7 +188,7 @@ legal identity/business and payment):
   package name. These are **permanent once published** — change them now if you'd
   rather use something else.
 
-## 6. Before you flip the switch — a short pre-launch pass
+## 7. Before you flip the switch — a short pre-launch pass
 
 - [ ] Swap the seed data's 4-district demo location set for the full Telangana
       LGD (Local Government Directory) dataset from data.gov.in — `backend/db.js`'s
@@ -194,9 +202,9 @@ legal identity/business and payment):
       tune it if it's too strict for your rollout (e.g. field employees enrolling
       many members from one IP/device in a day).
 - [ ] Load-test if you expect a big-bang launch (a district-wide announcement, a
-      TV/radio spot) rather than organic growth — SQLite + a single small server
+      TV/radio spot) rather than organic growth — Supabase's free tier Postgres
       handles moderate concurrent load fine, but a sudden spike is a different
-      question than steady growth.
+      question than steady growth; upgrade the Supabase plan if you expect one.
 
 ## What I can't do for you
 

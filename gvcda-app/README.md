@@ -2,12 +2,13 @@
 
 A real, working build of the GVCDA multi-role app: **Member, Employee, and Retailer
 share one login** (role resolved after OTP); **Admin** is a separate web dashboard.
-This isn't a mockup — it's a live Express + SQLite backend, a React web client, and
-a React Native (Expo) mobile app, all talking to the same real REST API.
+This isn't a mockup — it's a live Express + Postgres (Supabase) backend, a React
+web client, and a React Native (Expo) mobile app, all talking to the same real
+REST API.
 
 ```
 gvcda-app/
-  backend/    Express API + SQLite — shared by both clients
+  backend/    Express API + Postgres (Supabase) — shared by both clients
   frontend/   React + Vite web app (Member/Employee/Retailer phone-frame + full Admin dashboard)
   mobile/     Expo React Native app (Member/Employee/Retailer) — see mobile/README.md
 ```
@@ -28,7 +29,7 @@ mock mode until you supply real credentials in `.env`.
 - **Payments — real, no gateway needed**: membership purchases and retailer commission settlements are direct bank/UPI transfer — a QR code + UPI deep link built from GVCDA's actual account (`lib/bankDetails.js`, `lib/payments.js`), the payer reports their UTR, and an Admin verifies it against the bank statement in the web dashboard's Payment Verification queue (`lib/paymentRequests.js`) before anything activates. Retailer orders are Cash on Delivery — the retailer collects payment directly and owes GVCDA the commission, settled the same way.
 - **Member**: registration, membership purchase (bank-transfer QR flow above), digital card, sector browsing scoped to the member's own village, retailer catalogue browsing, real cart → COD order flow, order tracking, jobs + apply, complaints
 - **Employee**: dashboard with live targets, assisted member enrolment, retailer listing, "my book" of enrolled members/retailers, incentive breakdown, GPS field-visit log
-- **Retailer**: self-registration → pending-approval gate → approved catalogue/orders/earnings. Order accept/reject/fulfil actually moves data through the database and recalculates commission owed. Business profile, bank/UPI payout details, promotions, and commission settlement are all live. Storefront photos and per-product images upload to local disk storage (`lib/uploads.js`) and show up everywhere a retailer/product does — member browsing, Admin's approval queue, the retailer's own catalogue and profile.
+- **Retailer**: self-registration → pending-approval gate → approved catalogue/orders/earnings. Order accept/reject/fulfil actually moves data through the database and recalculates commission owed. Business profile, bank/UPI payout details, promotions, and commission settlement are all live. Storefront photos and per-product images upload to Supabase Storage (local disk in dev — `lib/uploads.js`) and show up everywhere a retailer/product does — member browsing, Admin's approval queue, the retailer's own catalogue and profile.
 - **Admin**: overview stats, payment verification queue, territory drill-down, retailer approval queue (with rejection reasons), employee performance leaderboard, revenue & commission reports, complaint desk, broadcast/notification tool, user & role management (create employee accounts, deactivate/reactivate)
 
 Commission math, membership card numbers, order totals, incentive payouts — all computed server-side from real database rows, not faked in the UI.
@@ -37,8 +38,8 @@ Commission math, membership card numbers, order totals, incentive payouts — al
 
 ```
 gvcda-app/
-  backend/          Express API + SQLite database
-    db.js           Schema + seed data
+  backend/          Express API + Postgres (Supabase)
+    db.js           Schema + async query helpers (get/all/run) + seed data
     server.js        Entry point — security middleware, error handling, graceful shutdown
     routes/          auth, locations, member, employee, retailer, admin
     middleware/auth.js   JWT verification + role guards
@@ -56,14 +57,17 @@ gvcda-app/
 
 ## Running it locally
 
-You'll need Node.js 18+ installed.
+You'll need Node.js 18+ and a Postgres database — the free tier of
+[Supabase](https://supabase.com) works well and is what this app is built
+against (Project → Settings → Database → Connection string).
 
 **1. Backend**
 ```bash
 cd backend
 npm install
-node db.js --seed   # creates gvcda.db and seeds demo data (only needs to run once)
-npm start            # runs on http://localhost:4000
+echo "DATABASE_URL=<your Supabase connection string>" > .env
+npm run seed          # creates schema + seeds demo data (only needs to run once)
+npm start              # runs on http://localhost:4000
 ```
 
 **2. Frontend** (in a second terminal)

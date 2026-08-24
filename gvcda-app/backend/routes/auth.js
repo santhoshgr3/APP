@@ -2,8 +2,8 @@ const express = require("express");
 const crypto = require("crypto");
 const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const router = express.Router();
-const { db } = require("../db");
-const { signToken } = require("../middleware/auth");
+const { get, all, run } = require("../db");
+const { signToken, requireAuth } = require("../middleware/auth");
 const { sendOtpSms } = require("../lib/sms");
 
 // In-memory OTP store. Fine for a single backend instance; move to Redis (with the
@@ -52,55 +52,61 @@ router.post("/request-otp", otpRequestLimiter, async (req, res) => {
 
 // POST /auth/verify-otp { phone, otp, full_name? }
 // Logs in if the phone exists; otherwise creates a new "member" account (self-signup).
-router.post("/verify-otp", (req, res) => {
-  const { phone, otp, full_name } = req.body;
-  const record = otpStore.get(phone);
+router.post("/verify-otp", async (req, res, next) => {
+  try {
+    const { phone, otp, full_name } = req.body;
+    const record = otpStore.get(phone);
 
-  if (!record) return res.status(401).json({ error: "Request a new OTP first" });
-  if (Date.now() > record.expiresAt) { otpStore.delete(phone); return res.status(401).json({ error: "OTP expired — request a new one" }); }
-  if (record.attempts >= MAX_VERIFY_ATTEMPTS) { otpStore.delete(phone); return res.status(429).json({ error: "Too many wrong attempts — request a new OTP" }); }
-  if (record.otp !== otp) {
-    record.attempts += 1;
-    return res.status(401).json({ error: `Invalid OTP (${MAX_VERIFY_ATTEMPTS - record.attempts} attempts left)` });
-  }
-  otpStore.delete(phone);
+    if (!record) return res.status(401).json({ error: "Request a new OTP first" });
+    if (Date.now() > record.expiresAt) { otpStore.delete(phone); return res.status(401).json({ error: "OTP expired — request a new one" }); }
+    if (record.attempts >= MAX_VERIFY_ATTEMPTS) { otpStore.delete(phone); return res.status(429).json({ error: "Too many wrong attempts — request a new OTP" }); }
+    if (record.otp !== otp) {
+      record.attempts += 1;
+      return res.status(401).json({ error: `Invalid OTP (${MAX_VERIFY_ATTEMPTS - record.attempts} attempts left)` });
+    }
+    otpStore.delete(phone);
 
-  let user = db.prepare("SELECT * FROM users WHERE phone = ?").get(phone);
-  let isNewUser = false;
-  if (!user) {
-    const result = db.prepare(
-      "INSERT INTO users (phone, full_name, role) VALUES (?, ?, 'member')"
-    ).run(phone, full_name || "New Member");
-    user = db.prepare("SELECT * FROM users WHERE user_id = ?").get(result.lastInsertRowid);
-    db.prepare("INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'member')").run(user.user_id);
-    isNewUser = true;
-  }
+    let user = await get("SELECT * FROM users WHERE phone = ?", [phone]);
+    let isNewUser = false;
+    if (!user) {
+      const result = await run(
+        "INSERT INTO users (phone, full_name, role) VALUES (?, ?, 'member') RETURNING user_id", [phone, full_name || "New Member"]
+      );
+      user = await get("SELECT * FROM users WHERE user_id = ?", [result.lastInsertRowid]);
+      await run("INSERT INTO user_roles (user_id, role) VALUES (?, 'member') ON CONFLICT DO NOTHING", [user.user_id]);
+      isNewUser = true;
+    }
 
-  if (!user.is_active) return res.status(403).json({ error: "Account deactivated. Contact admin." });
+    if (!user.is_active) return res.status(403).json({ error: "Account deactivated. Contact admin." });
 
-  const token = signToken(user);
-  const roles = db.prepare("SELECT role FROM user_roles WHERE user_id = ?").all(user.user_id).map((r) => r.role);
-  res.json({ token, user, is_new_user: isNewUser, roles: roles.length ? roles : [user.role] });
+    const token = signToken(user);
+    const roles = (await all("SELECT role FROM user_roles WHERE user_id = ?", [user.user_id])).map((r) => r.role);
+    res.json({ token, user, is_new_user: isNewUser, roles: roles.length ? roles : [user.role] });
+  } catch (e) { next(e); }
 });
 
 // GET /auth/me
-router.get("/me", require("../middleware/auth").requireAuth, (req, res) => {
-  const user = db.prepare("SELECT * FROM users WHERE user_id = ?").get(req.auth.user_id);
-  const roles = db.prepare("SELECT role FROM user_roles WHERE user_id = ?").all(req.auth.user_id).map((r) => r.role);
-  res.json({ user, roles: roles.length ? roles : [user.role] });
+router.get("/me", requireAuth, async (req, res, next) => {
+  try {
+    const user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
+    const roles = (await all("SELECT role FROM user_roles WHERE user_id = ?", [req.auth.user_id])).map((r) => r.role);
+    res.json({ user, roles: roles.length ? roles : [user.role] });
+  } catch (e) { next(e); }
 });
 
 // POST /auth/switch-role { role } — dual-role accounts only; issues a fresh token with a
 // different active role (e.g. a Member who is also an approved Retailer).
-router.post("/switch-role", require("../middleware/auth").requireAuth, (req, res) => {
-  const { role } = req.body;
-  const held = db.prepare("SELECT 1 FROM user_roles WHERE user_id = ? AND role = ?").get(req.auth.user_id, role);
-  if (!held) return res.status(403).json({ error: "This account does not hold that role" });
+router.post("/switch-role", requireAuth, async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    const held = await get("SELECT 1 FROM user_roles WHERE user_id = ? AND role = ?", [req.auth.user_id, role]);
+    if (!held) return res.status(403).json({ error: "This account does not hold that role" });
 
-  db.prepare("UPDATE users SET role = ? WHERE user_id = ?").run(role, req.auth.user_id);
-  const user = db.prepare("SELECT * FROM users WHERE user_id = ?").get(req.auth.user_id);
-  const token = signToken(user);
-  res.json({ token, user });
+    await run("UPDATE users SET role = ? WHERE user_id = ?", [role, req.auth.user_id]);
+    const user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
+    const token = signToken(user);
+    res.json({ token, user });
+  } catch (e) { next(e); }
 });
 
 module.exports = router;

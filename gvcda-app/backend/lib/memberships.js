@@ -1,25 +1,26 @@
-const { db } = require("../db");
+const { get, run } = require("../db");
 
 // Shared by the mock/dev path (no bank details configured) and the Admin-verified
 // bank-transfer path (lib/paymentRequests.js) — both end up creating a membership
 // the same way. payment_ref (when set) makes this idempotent: verifying the same
 // request twice won't create a duplicate membership.
-function createMembership({ userId, planId, soldByEmployeeId = null, paymentRef = null }) {
+async function createMembership({ userId, planId, soldByEmployeeId = null, paymentRef = null }) {
   if (paymentRef) {
-    const existing = db.prepare("SELECT * FROM memberships WHERE payment_ref = ?").get(paymentRef);
+    const existing = await get("SELECT * FROM memberships WHERE payment_ref = ?", [paymentRef]);
     if (existing) return existing;
   }
 
-  const plan = db.prepare("SELECT * FROM membership_plans WHERE plan_id = ?").get(planId);
+  const plan = await get("SELECT * FROM membership_plans WHERE plan_id = ?", [planId]);
   if (!plan) throw new Error("Plan not found");
 
   const cardNumber = "GVC-" + Math.floor(100000 + Math.random() * 900000);
-  const result = db.prepare(
+  const result = await run(
     `INSERT INTO memberships (user_id, plan_id, card_number, start_date, end_date, amount_paid, sold_by_employee_id, payment_ref)
-     VALUES (?, ?, ?, date('now'), date('now', '+365 days'), ?, ?, ?)`
-  ).run(userId, planId, cardNumber, plan.price, soldByEmployeeId, paymentRef);
+     VALUES (?, ?, ?, CURRENT_DATE, (CURRENT_DATE + INTERVAL '365 days')::date, ?, ?, ?) RETURNING membership_id`,
+    [userId, planId, cardNumber, plan.price, soldByEmployeeId, paymentRef]
+  );
 
-  return db.prepare("SELECT * FROM memberships WHERE membership_id = ?").get(result.lastInsertRowid);
+  return await get("SELECT * FROM memberships WHERE membership_id = ?", [result.lastInsertRowid]);
 }
 
 module.exports = { createMembership };

@@ -7,7 +7,7 @@ const morgan = require("morgan");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
 const { UPLOAD_DIR, useSupabase } = require("./lib/uploads");
-require("./db"); // ensures schema is created on boot
+const { ready: dbReady } = require("./db"); // schema creation kicks off on require; awaited before the server starts accepting requests
 
 const isProd = process.env.NODE_ENV === "production";
 const app = express();
@@ -65,12 +65,21 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-const server = app.listen(PORT, () => console.log(`GVCDA backend running on http://localhost:${PORT} [${isProd ? "production" : "development"}]`));
+let server;
+dbReady
+  .then(() => {
+    server = app.listen(PORT, () => console.log(`GVCDA backend running on http://localhost:${PORT} [${isProd ? "production" : "development"}]`));
+  })
+  .catch((e) => {
+    console.error("Failed to initialize database schema:", e);
+    process.exit(1);
+  });
 
 // Let in-flight requests finish before the process exits on deploy/restart.
 function shutdown() {
   console.log("Shutting down gracefully...");
-  server.close(() => process.exit(0));
+  if (server) server.close(() => process.exit(0));
+  else process.exit(0);
   setTimeout(() => process.exit(1), 10000).unref();
 }
 process.on("SIGTERM", shutdown);
