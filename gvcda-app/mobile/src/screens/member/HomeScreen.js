@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, TouchableOpacity, FlatList, RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Screen, Card, LoadingScreen, EmptyState } from "../../components/ui";
+import RetailerThumb from "../../components/RetailerThumb";
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { T } from "../../theme";
@@ -82,9 +83,12 @@ export default function HomeScreen({ navigation }) {
             <Text style={{ fontSize: 13, fontWeight: "700", marginBottom: 10 }}>Nearby Retailers</Text>
             {data.nearby.length === 0 && <EmptyState icon="search" text="No approved retailers in your village yet." />}
             {data.nearby.map((r) => (
-              <Card key={r.retailer_id} onPress={() => navigation.navigate("RetailerProfile", { id: r.retailer_id })} style={{ marginBottom: 8 }}>
-                <Text style={{ fontSize: 13, fontWeight: "700" }}>{r.business_name}</Text>
-                <Text style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name}</Text>
+              <Card key={r.retailer_id} onPress={() => navigation.navigate("RetailerProfile", { id: r.retailer_id })} style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <RetailerThumb photo={r.primary_photo} />
+                <View>
+                  <Text style={{ fontSize: 13, fontWeight: "700" }}>{r.business_name}</Text>
+                  <Text style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name}</Text>
+                </View>
               </Card>
             ))}
           </View>

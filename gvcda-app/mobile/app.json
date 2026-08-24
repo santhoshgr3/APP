@@ -32,6 +32,13 @@
         {
           "locationWhenInUsePermission": "GVCDA uses your location to log field visits."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "GVCDA uses your photos to add storefront and product images.",
+          "cameraPermission": "GVCDA uses your camera to take storefront and product photos."
+        }
       ]
     ]
   }

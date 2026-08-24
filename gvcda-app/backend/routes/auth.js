@@ -1,6 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const router = express.Router();
 const { db } = require("../db");
 const { signToken } = require("../middleware/auth");
@@ -26,7 +26,10 @@ const otpRequestLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `${req.ip}:${req.body?.phone || ""}`,
+  // ipKeyGenerator normalizes IPv6 addresses to their /64 prefix — without it, an
+  // IPv6 client could bypass this limiter by cycling through addresses in their
+  // own subnet, since every address in it would otherwise count as "different".
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${req.body?.phone || ""}`,
   message: { error: "Too many OTP requests. Try again in a few minutes." },
 });
 

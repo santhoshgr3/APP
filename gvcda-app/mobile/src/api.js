@@ -60,6 +60,42 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
   return data;
 }
 
+// Uploads a batch of picker assets (from expo-image-picker) as multipart form
+// data. React Native's fetch wants { uri, name, type } per file, not a real File
+// object like the browser — this is the RN-specific counterpart to requestForm
+// in the web app's api.js.
+async function requestUpload(path, fieldName, assets) {
+  const base = await getApiUrl();
+  const token = await getToken();
+  const form = new FormData();
+  assets.forEach((asset, i) => {
+    const ext = asset.uri.split(".").pop().split("?")[0].toLowerCase();
+    const type = asset.mimeType || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg");
+    form.append(fieldName, { uri: asset.uri, name: `photo-${i}.${ext === "jpg" ? "jpg" : ext}`, type });
+  });
+  let res;
+  try {
+    res = await fetch(base + path, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form });
+  } catch (e) {
+    throw new Error(`Can't reach the server at ${base}.`);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 401 && onUnauthorized) onUnauthorized();
+    throw new Error(data.error || `Request failed: ${res.status}`);
+  }
+  return data;
+}
+
+// Uploaded files are served at /uploads/<filename> off the same backend origin.
+// Synchronous (unlike getApiUrl) so components can use it directly in render —
+// by the time any screen renders a photo, something earlier (Login, at minimum)
+// has already triggered getApiUrl() once and populated the module-level cache.
+export function photoUrl(filename) {
+  if (!filename) return null;
+  return `${cachedBase || DEFAULT_API_URL}/uploads/${filename}`;
+}
+
 export const api = {
   // auth
   requestOtp: (phone) => request("/auth/request-otp", { method: "POST", body: { phone }, auth: false }),
@@ -122,6 +158,12 @@ export const api = {
   retailerPromotions: () => request("/retailer/promotions"),
   createPromotion: (payload) => request("/retailer/promotions", { method: "POST", body: payload }),
   togglePromotion: (id, is_active) => request(`/retailer/promotions/${id}`, { method: "PATCH", body: { is_active } }),
+  retailerPhotos: () => request("/retailer/photos"),
+  uploadRetailerPhotos: (assets) => requestUpload("/retailer/photos", "photos", assets),
+  setPrimaryPhoto: (id) => request(`/retailer/photos/${id}`, { method: "PATCH", body: { is_primary: true } }),
+  deleteRetailerPhoto: (id) => request(`/retailer/photos/${id}`, { method: "DELETE" }),
+  uploadProductImage: (productId, asset) => requestUpload(`/retailer/products/${productId}/image`, "image", [asset]),
+  deleteProductImage: (productId) => request(`/retailer/products/${productId}/image`, { method: "DELETE" }),
 };
 
 export async function saveSession(token, user, roles) {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Image, ScrollView } from "react-native";
 import { TopBar, Screen, Card, Btn, LoadingScreen, EmptyState, Chip } from "../../components/ui";
-import { api } from "../../api";
+import { api, photoUrl } from "../../api";
 import { useCart } from "../../context/CartContext";
 import { T } from "../../theme";
 
@@ -20,12 +20,19 @@ export default function RetailerProfileScreen({ navigation, route }) {
     </View>
   );
 
-  const { retailer, products, promotions } = data;
+  const { retailer, products, promotions, photos } = data;
 
   return (
     <View style={{ flex: 1, backgroundColor: T.cream }}>
       <TopBar title={retailer.business_name} subtitle={`${retailer.village_name} • ${retailer.category_name}`} onBack={() => navigation.goBack()} />
       <Screen>
+        {photos?.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+            {photos.map((p) => (
+              <Image key={p.photo_id} source={{ uri: photoUrl(p.filename) }} style={{ width: 140, height: 100, borderRadius: 10, marginRight: 8 }} />
+            ))}
+          </ScrollView>
+        )}
         {retailer.description ? <Text style={{ fontSize: 12, color: T.inkSoft, marginBottom: 10 }}>{retailer.description}</Text> : null}
         {retailer.hours ? <Text style={{ fontSize: 11.5, color: T.inkSoft, marginBottom: 12 }}>Hours: {retailer.hours}</Text> : null}
 
@@ -43,9 +50,16 @@ export default function RetailerProfileScreen({ navigation, route }) {
         {products.length === 0 && <EmptyState icon="shopping-cart" text="No products listed yet." />}
         {products.map((p) => (
           <Card key={p.product_id} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <View>
-              <Text style={{ fontSize: 12.5, fontWeight: "700" }}>{p.name}</Text>
-              <Text style={{ fontSize: 11.5, color: T.terracotta, fontWeight: "700" }}>₹{p.price}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 }}>
+              {p.image_filename ? (
+                <Image source={{ uri: photoUrl(p.image_filename) }} style={{ width: 44, height: 44, borderRadius: 8 }} />
+              ) : (
+                <View style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: T.tealLight }} />
+              )}
+              <View>
+                <Text style={{ fontSize: 12.5, fontWeight: "700" }}>{p.name}</Text>
+                <Text style={{ fontSize: 11.5, color: T.terracotta, fontWeight: "700" }}>₹{p.price}</Text>
+              </View>
             </View>
             <Btn variant="secondary" icon="plus" onPress={() => addToCart({ ...p, retailer_id: retailer.retailer_id })}>Add</Btn>
           </Card>

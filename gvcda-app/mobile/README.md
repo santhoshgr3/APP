@@ -64,8 +64,9 @@ Every screen from the Screen Specification doc for Member, Employee and Retailer
   with manual-village fallback if permission is denied)
 - **Retailer**: Business registration, Pending-approval screen (polls status),
   Home dashboard, Orders inbox (accept/reject/fulfil), Order detail with COD
-  commission breakdown, Catalogue manager, Earnings + commission settlement
-  (same QR flow as membership payment), Business profile + promotions + bank/UPI details
+  commission breakdown, Catalogue manager with per-product photo upload,
+  Earnings + commission settlement (same QR flow as membership payment),
+  Business profile + storefront photo gallery + promotions + bank/UPI details
 
 ### Payments — bank/UPI transfer, no gateway
 
@@ -100,4 +101,3 @@ mobile/
 
 - OTP is fixed at `123456` (dev mode) — configure `MSG91_*`/`TWILIO_*` env vars on the backend for real SMS delivery in production.
 - Payment verification is manual — an Admin checks each UTR against the bank statement by hand (no gateway/webhook to auto-confirm).
-- Retailer/product photo upload isn't wired (matches the backend, which doesn't store files yet).

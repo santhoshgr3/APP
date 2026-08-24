@@ -27,7 +27,8 @@ router.get("/retailers/pending", (req, res) => {
      LEFT JOIN users e ON e.user_id = r.onboarding_employee_id
      WHERE r.status = 'pending' ORDER BY r.created_at`
   ).all();
-  res.json(rows);
+  const photosByRetailer = db.prepare("SELECT * FROM retailer_photos ORDER BY is_primary DESC, created_at").all();
+  res.json(rows.map((r) => ({ ...r, photos: photosByRetailer.filter((p) => p.retailer_id === r.retailer_id) })));
 });
 
 // PATCH /admin/retailers/:id { status: approved|rejected, reason? }

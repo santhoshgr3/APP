@@ -28,7 +28,7 @@ mock mode until you supply real credentials in `.env`.
 - **Payments — real, no gateway needed**: membership purchases and retailer commission settlements are direct bank/UPI transfer — a QR code + UPI deep link built from GVCDA's actual account (`lib/bankDetails.js`, `lib/payments.js`), the payer reports their UTR, and an Admin verifies it against the bank statement in the web dashboard's Payment Verification queue (`lib/paymentRequests.js`) before anything activates. Retailer orders are Cash on Delivery — the retailer collects payment directly and owes GVCDA the commission, settled the same way.
 - **Member**: registration, membership purchase (bank-transfer QR flow above), digital card, sector browsing scoped to the member's own village, retailer catalogue browsing, real cart → COD order flow, order tracking, jobs + apply, complaints
 - **Employee**: dashboard with live targets, assisted member enrolment, retailer listing, "my book" of enrolled members/retailers, incentive breakdown, GPS field-visit log
-- **Retailer**: self-registration → pending-approval gate → approved catalogue/orders/earnings. Order accept/reject/fulfil actually moves data through the database and recalculates commission owed. Business profile, bank/UPI payout details, promotions, and commission settlement are all live.
+- **Retailer**: self-registration → pending-approval gate → approved catalogue/orders/earnings. Order accept/reject/fulfil actually moves data through the database and recalculates commission owed. Business profile, bank/UPI payout details, promotions, and commission settlement are all live. Storefront photos and per-product images upload to local disk storage (`lib/uploads.js`) and show up everywhere a retailer/product does — member browsing, Admin's approval queue, the retailer's own catalogue and profile.
 - **Admin**: overview stats, payment verification queue, territory drill-down, retailer approval queue (with rejection reasons), employee performance leaderboard, revenue & commission reports, complaint desk, broadcast/notification tool, user & role management (create employee accounts, deactivate/reactivate)
 
 Commission math, membership card numbers, order totals, incentive payouts — all computed server-side from real database rows, not faked in the UI.
@@ -111,6 +111,5 @@ To add a screen: add the endpoint to the matching route file, add the query to `
 
 See [GO_LIVE.md](GO_LIVE.md) for the full checklist (accounts, hosting, app store submission). The short version of what's genuinely still missing from the code itself:
 
-- **File uploads**: retailer photos and product images aren't wired — add multipart upload handling + object storage (S3/GCS).
 - **Full LGD dataset**: only 4 districts are seeded for the demo. Swap in the complete Telangana District/Mandal/Village dataset from data.gov.in's Local Government Directory (`backend/db.js`'s `seed()`).
 - **Payment verification is manual**: an Admin cross-checks each UTR against the bank statement by hand (no gateway/webhook to auto-confirm) — fine at current scale, see GO_LIVE.md §1 for what'd reduce that as volume grows.

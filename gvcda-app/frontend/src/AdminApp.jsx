@@ -3,7 +3,7 @@ import {
   Home, Store, Users, MapPinned, TrendingUp, AlertCircle, LogOut, IndianRupee,
   Megaphone, UserCog, ChevronRight, Plus, Banknote, ExternalLink,
 } from "lucide-react";
-import { api } from "./api";
+import { api, photoUrl } from "./api";
 import { Card, Btn, Chip, EmptyState, LoadingScreen, ErrorBanner, Field, inputStyle, T } from "./ui";
 
 // Admin is a separate, full-width web dashboard (not the phone-frame mobile shell) —
@@ -225,6 +225,15 @@ function ApprovalsTab({ refreshKey, onAction }) {
             </div>
             <Chip tone="gold">Pending</Chip>
           </div>
+          {r.photos?.length > 0 ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+              {r.photos.map((p) => (
+                <img key={p.photo_id} src={photoUrl(p.filename)} alt="" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8, border: `1px solid ${T.line}` }} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 8, fontStyle: "italic" }}>No photos submitted</div>
+          )}
           {rejecting === r.retailer_id ? (
             <div style={{ marginTop: 10 }}>
               <input style={inputStyle} placeholder="Reason for rejection" value={reason} onChange={(e) => setReason(e.target.value)} />

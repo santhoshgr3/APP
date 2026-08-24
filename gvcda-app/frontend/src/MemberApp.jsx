@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from "react";
 import {
   Home, Search, ClipboardList, Briefcase, User, MapPin, QrCode, Star, Plus, Minus,
-  ShoppingCart, CheckCircle2, Clock, AlertCircle, Settings, LogOut, Send, Truck
+  ShoppingCart, CheckCircle2, Clock, AlertCircle, Settings, LogOut, Send, Truck, Store
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { api, clearSession, saveSession } from "./api";
+import { api, clearSession, saveSession, photoUrl } from "./api";
 import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, T } from "./ui";
 import BankTransferQR from "./BankTransferQR";
 import LocationCascade from "./LocationCascade";
+
+function RetailerThumb({ photo, size = 44 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: 10, background: T.tealLight, flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {photo ? <img src={photoUrl(photo)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Store size={size * 0.4} color={T.teal} />}
+    </div>
+  );
+}
 
 export default function MemberApp({ user, roles = [], onLogout, onRoleChanged }) {
   const [tab, setTab] = useState("home");
@@ -84,9 +92,12 @@ function HomeTab({ push, user }) {
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Nearby Retailers</div>
       {data.nearby.length === 0 && <EmptyState icon={Search} text="No approved retailers in your village yet." />}
       {data.nearby.map((r) => (
-        <Card key={r.retailer_id} onClick={() => push("retailer", { id: r.retailer_id })} style={{ marginBottom: 8, cursor: "pointer" }}>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>{r.business_name}</div>
-          <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name}</div>
+        <Card key={r.retailer_id} onClick={() => push("retailer", { id: r.retailer_id })} style={{ marginBottom: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+          <RetailerThumb photo={r.primary_photo} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{r.business_name}</div>
+            <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name}</div>
+          </div>
         </Card>
       ))}
     </Screen>
@@ -103,8 +114,11 @@ function SectorDetail({ categoryId, categoryName, onBack, onOpenRetailer }) {
       <Screen>
         {list.length === 0 && <EmptyState icon={Search} text={`No ${categoryName} retailers listed in your Mandal yet.`} />}
         {list.map((r) => (
-          <Card key={r.retailer_id} onClick={() => onOpenRetailer(r.retailer_id)} style={{ marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between" }}>
-            <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{r.business_name}</div><div style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</div></div>
+          <Card key={r.retailer_id} onClick={() => onOpenRetailer(r.retailer_id)} style={{ marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <RetailerThumb photo={r.primary_photo} />
+              <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{r.business_name}</div><div style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</div></div>
+            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: T.gold }}><Star size={12} fill={T.gold} color={T.gold} />{r.rating_avg || "New"}</div>
           </Card>
         ))}
@@ -122,11 +136,25 @@ function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
     <>
       <TopBar title={data.retailer.business_name} subtitle={`${data.retailer.village_name} • ${data.retailer.category_name}`} onBack={onBack} />
       <Screen>
+        {data.photos?.length > 0 && (
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16, paddingBottom: 2 }}>
+            {data.photos.map((p) => (
+              <img key={p.photo_id} src={photoUrl(p.filename)} alt="" style={{ width: 140, height: 100, objectFit: "cover", borderRadius: 10, flexShrink: 0 }} />
+            ))}
+          </div>
+        )}
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Products & Services</div>
         {data.products.length === 0 && <EmptyState icon={ShoppingCart} text="No products listed yet." />}
         {data.products.map((p) => (
           <Card key={p.product_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{p.name}</div><div style={{ fontSize: 11.5, color: T.terracotta, fontWeight: 700 }}>₹{p.price}</div></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {p.image_filename ? (
+                <img src={photoUrl(p.image_filename)} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 44, height: 44, borderRadius: 8, background: T.tealLight, flexShrink: 0 }} />
+              )}
+              <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{p.name}</div><div style={{ fontSize: 11.5, color: T.terracotta, fontWeight: 700 }}>₹{p.price}</div></div>
+            </div>
             <Btn variant="secondary" onClick={() => onAdd(p)}><Plus size={12} /> Add</Btn>
           </Card>
         ))}

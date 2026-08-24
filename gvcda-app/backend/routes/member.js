@@ -68,7 +68,9 @@ router.get("/home", (req, res) => {
   let nearby = [];
   if (user.village_id) {
     nearby = db.prepare(
-      `SELECT r.*, v.name as village_name FROM retailers r
+      `SELECT r.*, v.name as village_name,
+              (SELECT filename FROM retailer_photos WHERE retailer_id = r.retailer_id ORDER BY is_primary DESC, created_at LIMIT 1) as primary_photo
+       FROM retailers r
        JOIN villages v ON v.village_id = r.village_id
        WHERE r.village_id = ? AND r.status = 'approved' LIMIT 5`
     ).all(user.village_id);
@@ -82,7 +84,9 @@ router.get("/retailers", (req, res) => {
   const villageId = req.query.village_id || user.village_id;
   const { category_id } = req.query;
 
-  let sql = `SELECT r.*, v.name as village_name, c.name as category_name FROM retailers r
+  let sql = `SELECT r.*, v.name as village_name, c.name as category_name,
+                    (SELECT filename FROM retailer_photos WHERE retailer_id = r.retailer_id ORDER BY is_primary DESC, created_at LIMIT 1) as primary_photo
+             FROM retailers r
              JOIN villages v ON v.village_id = r.village_id
              JOIN retailer_categories c ON c.category_id = r.category_id
              WHERE r.status = 'approved'`;
@@ -106,7 +110,8 @@ router.get("/retailers/:id", (req, res) => {
   const promotions = db.prepare(
     "SELECT * FROM promotions WHERE retailer_id = ? AND is_active = 1 AND date('now') BETWEEN start_date AND end_date"
   ).all(req.params.id);
-  res.json({ retailer, products, promotions });
+  const photos = db.prepare("SELECT * FROM retailer_photos WHERE retailer_id = ? ORDER BY is_primary DESC, created_at").all(req.params.id);
+  res.json({ retailer, products, promotions, photos });
 });
 
 // POST /member/orders { retailer_id, items: [{product_id, quantity}] }

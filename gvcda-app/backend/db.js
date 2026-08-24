@@ -98,6 +98,19 @@ CREATE TABLE IF NOT EXISTS retailers (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Storefront photos for a retailer listing (List Retailer / Business Registration
+-- screens call for "photos", plural — Admin's approval queue and the member-facing
+-- profile both show them). is_primary marks the one used as the listing's cover
+-- image in retailer grids; if none is marked, the frontend just falls back to the
+-- first row. Files themselves live on disk under backend/uploads/ (see lib/uploads.js).
+CREATE TABLE IF NOT EXISTS retailer_photos (
+  photo_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  retailer_id INTEGER NOT NULL REFERENCES retailers(retailer_id),
+  filename TEXT NOT NULL,
+  is_primary INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS promotions (
   promotion_id INTEGER PRIMARY KEY AUTOINCREMENT,
   retailer_id INTEGER NOT NULL REFERENCES retailers(retailer_id),
@@ -139,6 +152,7 @@ CREATE TABLE IF NOT EXISTS products (
   retailer_id INTEGER NOT NULL REFERENCES retailers(retailer_id),
   name TEXT NOT NULL,
   price REAL NOT NULL,
+  image_filename TEXT,
   is_available INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

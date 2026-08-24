@@ -6,6 +6,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
+const { UPLOAD_DIR } = require("./lib/uploads");
 require("./db"); // ensures schema is created on boot
 
 const isProd = process.env.NODE_ENV === "production";
@@ -21,6 +22,13 @@ app.use(morgan(isProd ? "combined" : "dev"));
 
 const corsOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()) : true;
 app.use(cors({ origin: corsOrigins }));
+
+// Uploaded photos, served back out as plain static files. Mounted ahead of
+// express.json() (uploads go through multer, not JSON body parsing) and with
+// Cross-Origin-Resource-Policy relaxed — helmet's default "same-origin" would
+// otherwise block the web app (on a different port/origin) and the mobile app
+// from loading these <img> sources at all.
+app.use("/uploads", (req, res, next) => { res.set("Cross-Origin-Resource-Policy", "cross-origin"); next(); }, express.static(UPLOAD_DIR, { maxAge: "7d" }));
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -43,7 +51,13 @@ app.use((req, res) => res.status(404).json({ error: "Not found" }));
 // with, so clients always get a clean JSON error instead of an HTML stack trace.
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(err.status || 500).json({ error: isProd ? "Internal server error" : err.message });
+  // Multer's errors ("File too large", "Unexpected field", our own mimetype
+  // check) are already safe, specific, user-facing text — worth showing even
+  // in production, unlike a generic internal error.
+  const isMulterError = err.name === "MulterError" || /image/i.test(err.message || "");
+  const status = err.status || (isMulterError ? 400 : 500);
+  const message = !isProd || isMulterError ? err.message : "Internal server error";
+  res.status(status).json({ error: message });
 });
 
 const PORT = process.env.PORT || 4000;

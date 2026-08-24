@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "react-native";
 import { TopBar, Screen, Card, LoadingScreen, EmptyState } from "../../components/ui";
+import RetailerThumb from "../../components/RetailerThumb";
 import { api } from "../../api";
 import { T } from "../../theme";
 
@@ -22,9 +23,12 @@ export default function SectorDetailScreen({ navigation, route }) {
           {list.length === 0 && <EmptyState icon="search" text={`No ${name} retailers listed in your Mandal yet.`} />}
           {list.map((r) => (
             <Card key={r.retailer_id} onPress={() => navigation.navigate("RetailerProfile", { id: r.retailer_id })} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <View>
-                <Text style={{ fontSize: 12.5, fontWeight: "700" }}>{r.business_name}</Text>
-                <Text style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <RetailerThumb photo={r.primary_photo} />
+                <View>
+                  <Text style={{ fontSize: 12.5, fontWeight: "700" }}>{r.business_name}</Text>
+                  <Text style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</Text>
+                </View>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                 <Feather name="star" size={12} color={T.gold} />

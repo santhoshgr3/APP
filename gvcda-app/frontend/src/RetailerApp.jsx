@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Home, ClipboardList, ShoppingBag, Wallet, Store, Plus, ThumbsUp, ThumbsDown, CheckCircle2, Clock, LogOut, Camera, Banknote } from "lucide-react";
-import { api } from "./api";
+import { api, photoUrl } from "./api";
 import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, T } from "./ui";
 import LocationCascade from "./LocationCascade";
 import BankTransferQR from "./BankTransferQR";
@@ -213,14 +213,37 @@ function OrderDetail({ id, onBack }) {
 
 function CatalogueTab({ push, refreshKey }) {
   const [products, setProducts] = useState(null);
-  useEffect(() => { api.retailerProducts().then(setProducts); }, [refreshKey]);
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => { api.retailerProducts().then(setProducts); }, [refreshKey, refresh]);
+
+  const changeImage = async (product, file) => {
+    if (!file) return;
+    await api.uploadProductImage(product.product_id, file);
+    setRefresh((r) => r + 1);
+  };
+
   return (
     <Screen>
       <Btn full variant="secondary" onClick={() => push("addProduct")} style={{ marginBottom: 12 }}><Plus size={13} /> Add Product</Btn>
       {products === null ? <LoadingScreen text="" /> : (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {products.map((p) => (
-            <Card key={p.product_id}><div style={{ fontSize: 12, fontWeight: 700 }}>{p.name}</div><div style={{ fontSize: 12.5, fontWeight: 700, color: T.terracotta, marginTop: 4 }}>₹{p.price}</div></Card>
+            <Card key={p.product_id} style={{ padding: 0, overflow: "hidden" }}>
+              <label style={{ display: "block", height: 90, background: T.tealLight, cursor: "pointer", position: "relative" }}>
+                {p.image_filename ? (
+                  <img src={photoUrl(p.image_filename)} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: T.teal }}>
+                    <Camera size={20} />
+                  </div>
+                )}
+                <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => changeImage(p, e.target.files[0])} />
+              </label>
+              <div style={{ padding: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{p.name}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: T.terracotta, marginTop: 4 }}>₹{p.price}</div>
+              </div>
+            </Card>
           ))}
         </div>
       )}
@@ -231,15 +254,42 @@ function CatalogueTab({ push, refreshKey }) {
 function AddProductForm({ onBack }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [photo, setPhoto] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const submit = async () => { setSubmitting(true); await api.addProduct(name, Number(price)); onBack(); };
+  const [error, setError] = useState("");
+
+  const pickPhoto = (file) => {
+    setPhoto(file);
+    setPreview(file ? URL.createObjectURL(file) : null);
+  };
+
+  const submit = async () => {
+    setSubmitting(true); setError("");
+    try {
+      const product = await api.addProduct(name, Number(price));
+      if (photo) await api.uploadProductImage(product.product_id, photo);
+      onBack();
+    } catch (e) { setError(e.message); setSubmitting(false); }
+  };
+
   return (
     <>
       <TopBar title="Add Product" onBack={onBack} />
       <Screen>
+        {error && <div style={{ color: T.red, fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <Field label="Name"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wheat Flour 5kg" /></Field>
         <Field label="Price (₹)"><input style={inputStyle} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 220" /></Field>
-        <Field label="Photo"><div style={{ border: `1px dashed ${T.line}`, borderRadius: 8, padding: 14, textAlign: "center", color: T.inkSoft }}><Camera size={16} style={{ margin: "0 auto 4px" }} /><div style={{ fontSize: 10.5 }}>Photo upload not wired in this demo</div></div></Field>
+        <Field label="Photo (optional)">
+          <label style={{ display: "block", border: `1px dashed ${T.line}`, borderRadius: 8, padding: preview ? 0 : 14, textAlign: "center", color: T.inkSoft, cursor: "pointer", overflow: "hidden" }}>
+            {preview ? (
+              <img src={preview} alt="Preview" style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
+            ) : (
+              <><Camera size={16} style={{ margin: "0 auto 4px" }} /><div style={{ fontSize: 10.5 }}>Tap to choose a photo</div></>
+            )}
+            <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => pickPhoto(e.target.files[0])} />
+          </label>
+        </Field>
         <Btn full disabled={!name || !price || submitting} onClick={submit}>{submitting ? "Saving..." : "Save Product"}</Btn>
       </Screen>
     </>
@@ -322,8 +372,10 @@ function EarningsTab({ refreshKey }) {
 function RetailerProfile({ retailer: initialRetailer, onLogout }) {
   const [retailer, setRetailer] = useState(initialRetailer);
   const [promotions, setPromotions] = useState(null);
+  const [photos, setPhotos] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [addingPromo, setAddingPromo] = useState(false);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [form, setForm] = useState({
     address: initialRetailer.address || "", hours: initialRetailer.hours || "", description: initialRetailer.description || "",
     bank_account: initialRetailer.bank_account || "", bank_ifsc: initialRetailer.bank_ifsc || "", upi_id: initialRetailer.upi_id || "",
@@ -340,8 +392,19 @@ function RetailerProfile({ retailer: initialRetailer, onLogout }) {
       });
     });
     api.retailerPromotions().then(setPromotions);
+    api.retailerPhotos().then(setPhotos);
   };
   useEffect(load, []);
+
+  const uploadPhotos = async (files) => {
+    if (!files || files.length === 0) return;
+    setUploadingPhotos(true); setError("");
+    try { await api.uploadRetailerPhotos(files); load(); }
+    catch (e) { setError(e.message); }
+    setUploadingPhotos(false);
+  };
+  const setPrimary = async (id) => { await api.setPrimaryPhoto(id); load(); };
+  const removePhoto = async (id) => { await api.deleteRetailerPhoto(id); load(); };
 
   const saveProfile = async () => {
     setError("");
@@ -392,6 +455,37 @@ function RetailerProfile({ retailer: initialRetailer, onLogout }) {
           {retailer.hours && <div style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 2 }}>{retailer.hours}</div>}
           {retailer.description && <div style={{ fontSize: 12, color: T.ink, marginTop: 8 }}>{retailer.description}</div>}
         </Card>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Storefront Photos</div>
+        <label style={{ display: "inline-block" }}>
+          <div style={{ pointerEvents: "none" }}>
+            <Btn variant="ghost"><Camera size={13} /> {uploadingPhotos ? "Uploading..." : "Add Photos"}</Btn>
+          </div>
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple style={{ display: "none" }} disabled={uploadingPhotos}
+            onChange={(e) => { uploadPhotos(e.target.files); e.target.value = ""; }} />
+        </label>
+      </div>
+      {photos === null ? <LoadingScreen text="" /> : photos.length === 0 ? (
+        <EmptyState icon={Camera} text="No photos yet — members see this listing without a storefront image." />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 20 }}>
+          {photos.map((p) => (
+            <div key={p.photo_id} style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: p.is_primary ? `2px solid ${T.teal}` : `1px solid ${T.line}` }}>
+              <img src={photoUrl(p.filename)} alt="" style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
+              {p.is_primary && (
+                <div style={{ position: "absolute", top: 3, left: 3, background: T.teal, color: "#fff", fontSize: 8, fontWeight: 700, padding: "2px 5px", borderRadius: 4 }}>COVER</div>
+              )}
+              <div style={{ position: "absolute", bottom: 3, right: 3, display: "flex", gap: 3 }}>
+                {!p.is_primary && (
+                  <button onClick={() => setPrimary(p.photo_id)} title="Set as cover" style={{ background: "rgba(0,0,0,0.6)", border: "none", borderRadius: 4, width: 20, height: 20, color: "#fff", fontSize: 10, cursor: "pointer" }}>★</button>
+                )}
+                <button onClick={() => removePhoto(p.photo_id)} title="Delete" style={{ background: "rgba(178,58,72,0.85)", border: "none", borderRadius: 4, width: 20, height: 20, color: "#fff", fontSize: 10, cursor: "pointer" }}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>

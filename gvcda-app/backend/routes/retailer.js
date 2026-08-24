@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
+const { uploadPhotos, uploadSingleImage, deleteFile } = require("../lib/uploads");
 
 router.use(requireAuth);
 
@@ -136,7 +137,9 @@ router.patch("/products/:id", withRetailer, (req, res) => {
 
 // DELETE /retailer/products/:id
 router.delete("/products/:id", withRetailer, (req, res) => {
+  const product = db.prepare("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?").get(req.params.id, req.retailer.retailer_id);
   db.prepare("DELETE FROM products WHERE product_id = ? AND retailer_id = ?").run(req.params.id, req.retailer.retailer_id);
+  if (product?.image_filename) deleteFile(product.image_filename);
   res.json({ ok: true });
 });
 
@@ -173,6 +176,72 @@ router.patch("/promotions/:id", withRetailer, (req, res) => {
   db.prepare("UPDATE promotions SET is_active = ? WHERE promotion_id = ? AND retailer_id = ?")
     .run(is_active ? 1 : 0, req.params.id, req.retailer.retailer_id);
   res.json({ ok: true });
+});
+
+// GET /retailer/photos — this retailer's storefront gallery
+router.get("/photos", withRetailer, (req, res) => {
+  res.json(db.prepare("SELECT * FROM retailer_photos WHERE retailer_id = ? ORDER BY is_primary DESC, created_at").all(req.retailer.retailer_id));
+});
+
+// POST /retailer/photos — multipart, field name "photos", up to 5 files at once.
+// The first photo a retailer ever uploads becomes the primary/cover image
+// automatically; after that, use PATCH /photos/:id to change it.
+router.post("/photos", withRetailer, uploadPhotos.array("photos", 5), (req, res, next) => {
+  if (!req.files || req.files.length === 0) return res.status(400).json({ error: "No photos uploaded" });
+  try {
+    const hasExisting = db.prepare("SELECT 1 FROM retailer_photos WHERE retailer_id = ?").get(req.retailer.retailer_id);
+    const insert = db.prepare("INSERT INTO retailer_photos (retailer_id, filename, is_primary) VALUES (?, ?, ?)");
+    req.files.forEach((file, i) => {
+      const isPrimary = !hasExisting && i === 0 ? 1 : 0;
+      insert.run(req.retailer.retailer_id, file.filename, isPrimary);
+    });
+    res.json(db.prepare("SELECT * FROM retailer_photos WHERE retailer_id = ? ORDER BY is_primary DESC, created_at").all(req.retailer.retailer_id));
+  } catch (e) { next(e); }
+});
+
+// PATCH /retailer/photos/:id { is_primary: true } — set the listing's cover photo
+router.patch("/photos/:id", withRetailer, (req, res) => {
+  const photo = db.prepare("SELECT * FROM retailer_photos WHERE photo_id = ? AND retailer_id = ?").get(req.params.id, req.retailer.retailer_id);
+  if (!photo) return res.status(404).json({ error: "Photo not found" });
+  db.prepare("UPDATE retailer_photos SET is_primary = 0 WHERE retailer_id = ?").run(req.retailer.retailer_id);
+  db.prepare("UPDATE retailer_photos SET is_primary = 1 WHERE photo_id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+// DELETE /retailer/photos/:id
+router.delete("/photos/:id", withRetailer, (req, res) => {
+  const photo = db.prepare("SELECT * FROM retailer_photos WHERE photo_id = ? AND retailer_id = ?").get(req.params.id, req.retailer.retailer_id);
+  if (!photo) return res.status(404).json({ error: "Photo not found" });
+  db.prepare("DELETE FROM retailer_photos WHERE photo_id = ?").run(req.params.id);
+  deleteFile(photo.filename);
+  // If that was the primary photo, promote whichever one's left (if any).
+  if (photo.is_primary) {
+    const next = db.prepare("SELECT photo_id FROM retailer_photos WHERE retailer_id = ? ORDER BY created_at LIMIT 1").get(req.retailer.retailer_id);
+    if (next) db.prepare("UPDATE retailer_photos SET is_primary = 1 WHERE photo_id = ?").run(next.photo_id);
+  }
+  res.json({ ok: true });
+});
+
+// POST /retailer/products/:id/image — multipart, field name "image". Replaces
+// whatever image the product already had (old file deleted from disk).
+router.post("/products/:id/image", withRetailer, uploadSingleImage.single("image"), (req, res, next) => {
+  const product = db.prepare("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?").get(req.params.id, req.retailer.retailer_id);
+  if (!product) return res.status(404).json({ error: "Product not found" });
+  if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+  try {
+    db.prepare("UPDATE products SET image_filename = ? WHERE product_id = ?").run(req.file.filename, req.params.id);
+    if (product.image_filename) deleteFile(product.image_filename);
+    res.json(db.prepare("SELECT * FROM products WHERE product_id = ?").get(req.params.id));
+  } catch (e) { next(e); }
+});
+
+// DELETE /retailer/products/:id/image
+router.delete("/products/:id/image", withRetailer, (req, res) => {
+  const product = db.prepare("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?").get(req.params.id, req.retailer.retailer_id);
+  if (!product) return res.status(404).json({ error: "Product not found" });
+  if (product.image_filename) deleteFile(product.image_filename);
+  db.prepare("UPDATE products SET image_filename = NULL WHERE product_id = ?").run(req.params.id);
+  res.json(db.prepare("SELECT * FROM products WHERE product_id = ?").get(req.params.id));
 });
 
 module.exports = router;

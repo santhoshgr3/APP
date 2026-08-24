@@ -24,6 +24,24 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
   return data;
 }
 
+// Separate from request() because file uploads must NOT set a JSON Content-Type —
+// the browser needs to set its own multipart boundary on the FormData body.
+async function requestForm(path, formData, method = "POST") {
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(BASE + path, { method, headers, body: formData });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed: ${res.status}`);
+  return data;
+}
+
+// Backend serves uploaded files at /uploads/<filename> off its own origin — this
+// resolves the same way api.js's BASE does (dev proxy vs VITE_API_URL in prod).
+export function photoUrl(filename) {
+  return filename ? `${BASE}/uploads/${filename}` : null;
+}
+
 export const api = {
   // auth
   requestOtp: (phone) => request("/auth/request-otp", { method: "POST", body: { phone }, auth: false }),
@@ -85,6 +103,20 @@ export const api = {
   retailerPromotions: () => request("/retailer/promotions"),
   createPromotion: (payload) => request("/retailer/promotions", { method: "POST", body: payload }),
   togglePromotion: (id, is_active) => request(`/retailer/promotions/${id}`, { method: "PATCH", body: { is_active } }),
+  retailerPhotos: () => request("/retailer/photos"),
+  uploadRetailerPhotos: (files) => {
+    const fd = new FormData();
+    [...files].forEach((f) => fd.append("photos", f));
+    return requestForm("/retailer/photos", fd);
+  },
+  setPrimaryPhoto: (id) => request(`/retailer/photos/${id}`, { method: "PATCH", body: { is_primary: true } }),
+  deleteRetailerPhoto: (id) => request(`/retailer/photos/${id}`, { method: "DELETE" }),
+  uploadProductImage: (productId, file) => {
+    const fd = new FormData();
+    fd.append("image", file);
+    return requestForm(`/retailer/products/${productId}/image`, fd);
+  },
+  deleteProductImage: (productId) => request(`/retailer/products/${productId}/image`, { method: "DELETE" }),
 
   // admin
   adminOverview: () => request("/admin/overview"),

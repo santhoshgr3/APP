@@ -90,6 +90,16 @@ outgrow single-writer throughput (unlikely until you're at real regional scale) 
 the schema in `backend/db.js` translates to Postgres almost column-for-column if
 that day comes.
 
+**Uploaded photos**: retailer storefront and product photos save to
+`backend/uploads/` on local disk (`lib/uploads.js`) and are served back out at
+`/uploads/<filename>` — genuinely working, not a stub. Same rule as the
+database: put it on persistent disk and back it up. The one thing this setup
+*can't* do is scale to more than one backend instance (a file uploaded to
+instance A wouldn't be visible from instance B) — if you ever run multiple
+instances behind a load balancer, that's the point to swap `lib/uploads.js` for
+an S3/GCS-backed version; every route that touches uploads calls only the
+functions this file exports, so the swap stays contained to one file.
+
 **Required env vars in production** (`backend/.env`, see `backend/.env.example`):
 ```
 NODE_ENV=production

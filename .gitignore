@@ -14,6 +14,9 @@ npm-debug.log*
 *.db
 *.db-journal
 
+# Uploaded retailer/product photos (local disk storage — see backend/lib/uploads.js)
+uploads/
+
 # Build output
 dist/
 build/
