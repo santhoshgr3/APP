@@ -36,10 +36,12 @@ async function requestForm(path, formData, method = "POST") {
   return data;
 }
 
-// Backend serves uploaded files at /uploads/<filename> off its own origin — this
-// resolves the same way api.js's BASE does (dev proxy vs VITE_API_URL in prod).
+// Photos are stored as either a full Supabase Storage URL (production) or a
+// bare filename served by the backend's own /uploads route (local dev fallback
+// — see backend/lib/uploads.js). Handle both without the caller needing to care.
 export function photoUrl(filename) {
-  return filename ? `${BASE}/uploads/${filename}` : null;
+  if (!filename) return null;
+  return /^https?:\/\//.test(filename) ? filename : `${BASE}/uploads/${filename}`;
 }
 
 export const api = {

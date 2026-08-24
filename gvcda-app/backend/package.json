@@ -11,6 +11,7 @@
     "seed": "node db.js --seed"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "better-sqlite3": "^11.3.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",

@@ -1,7 +1,9 @@
 const Database = require("better-sqlite3");
 const path = require("path");
 
-const db = new Database(path.join(__dirname, "gvcda.db"));
+// DB_PATH lets production point this at a persistent disk mount (e.g. Render's
+// disk at /var/data/gvcda.db) instead of the source tree. Unset in local dev.
+const db = new Database(process.env.DB_PATH || path.join(__dirname, "gvcda.db"));
 db.pragma("foreign_keys = ON");
 
 // ---------- SCHEMA ----------

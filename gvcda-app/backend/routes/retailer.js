@@ -3,7 +3,7 @@ const router = express.Router();
 const { db } = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
-const { uploadPhotos, uploadSingleImage, deleteFile } = require("../lib/uploads");
+const { uploadPhotos, uploadSingleImage, saveFiles, deleteFile } = require("../lib/uploads");
 
 router.use(requireAuth);
 
@@ -186,14 +186,15 @@ router.get("/photos", withRetailer, (req, res) => {
 // POST /retailer/photos — multipart, field name "photos", up to 5 files at once.
 // The first photo a retailer ever uploads becomes the primary/cover image
 // automatically; after that, use PATCH /photos/:id to change it.
-router.post("/photos", withRetailer, uploadPhotos.array("photos", 5), (req, res, next) => {
+router.post("/photos", withRetailer, uploadPhotos.array("photos", 5), async (req, res, next) => {
   if (!req.files || req.files.length === 0) return res.status(400).json({ error: "No photos uploaded" });
   try {
+    const urls = await saveFiles(req.files);
     const hasExisting = db.prepare("SELECT 1 FROM retailer_photos WHERE retailer_id = ?").get(req.retailer.retailer_id);
     const insert = db.prepare("INSERT INTO retailer_photos (retailer_id, filename, is_primary) VALUES (?, ?, ?)");
-    req.files.forEach((file, i) => {
+    urls.forEach((url, i) => {
       const isPrimary = !hasExisting && i === 0 ? 1 : 0;
-      insert.run(req.retailer.retailer_id, file.filename, isPrimary);
+      insert.run(req.retailer.retailer_id, url, isPrimary);
     });
     res.json(db.prepare("SELECT * FROM retailer_photos WHERE retailer_id = ? ORDER BY is_primary DESC, created_at").all(req.retailer.retailer_id));
   } catch (e) { next(e); }
@@ -224,12 +225,13 @@ router.delete("/photos/:id", withRetailer, (req, res) => {
 
 // POST /retailer/products/:id/image — multipart, field name "image". Replaces
 // whatever image the product already had (old file deleted from disk).
-router.post("/products/:id/image", withRetailer, uploadSingleImage.single("image"), (req, res, next) => {
+router.post("/products/:id/image", withRetailer, uploadSingleImage.single("image"), async (req, res, next) => {
   const product = db.prepare("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?").get(req.params.id, req.retailer.retailer_id);
   if (!product) return res.status(404).json({ error: "Product not found" });
   if (!req.file) return res.status(400).json({ error: "No image uploaded" });
   try {
-    db.prepare("UPDATE products SET image_filename = ? WHERE product_id = ?").run(req.file.filename, req.params.id);
+    const [url] = await saveFiles([req.file]);
+    db.prepare("UPDATE products SET image_filename = ? WHERE product_id = ?").run(url, req.params.id);
     if (product.image_filename) deleteFile(product.image_filename);
     res.json(db.prepare("SELECT * FROM products WHERE product_id = ?").get(req.params.id));
   } catch (e) { next(e); }

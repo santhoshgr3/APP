@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: gvcda-backend
+    runtime: node
+    rootDir: gvcda-app/backend
+    plan: starter # needed for the persistent disk below — the free plan's disk is wiped on every restart/deploy
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    disk:
+      name: gvcda-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /var/data/gvcda.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false # set to your Vercel domain, e.g. https://gvcda.vercel.app
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: gvcda-photos
+      # Optional — SMS OTP providers (see ../gvcda-app/GO_LIVE.md §2). Leave unset
+      # to keep the fixed dev OTP (123456); the backend refuses to boot without
+      # JWT_SECRET but will keep working without these until you're ready for real SMS.
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_TEMPLATE_ID
+        sync: false
+      - key: MSG91_SENDER_ID
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false

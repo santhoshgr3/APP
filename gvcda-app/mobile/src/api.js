@@ -87,12 +87,15 @@ async function requestUpload(path, fieldName, assets) {
   return data;
 }
 
-// Uploaded files are served at /uploads/<filename> off the same backend origin.
-// Synchronous (unlike getApiUrl) so components can use it directly in render —
-// by the time any screen renders a photo, something earlier (Login, at minimum)
-// has already triggered getApiUrl() once and populated the module-level cache.
+// Photos are stored as either a full Supabase Storage URL (production) or a
+// bare filename served off the backend's own origin at /uploads/<filename>
+// (local dev fallback — see backend/lib/uploads.js). Synchronous (unlike
+// getApiUrl) so components can use it directly in render — by the time any
+// screen renders a photo, something earlier (Login, at minimum) has already
+// triggered getApiUrl() once and populated the module-level cache.
 export function photoUrl(filename) {
   if (!filename) return null;
+  if (/^https?:\/\//.test(filename)) return filename;
   return `${cachedBase || DEFAULT_API_URL}/uploads/${filename}`;
 }
 

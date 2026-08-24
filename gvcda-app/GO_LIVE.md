@@ -68,59 +68,87 @@ Either way, OTPs become real random 6-digit codes the moment a provider is
 configured (see `generateOtp()` in `routes/auth.js`) — the fixed `123456` is only
 ever used when nothing is configured.
 
-## 3. Hosting the backend
+## 3. Hosting the backend — Render
 
-The backend is a plain Express app (`backend/server.js`) — deploy it anywhere that
-runs Node 18+:
+The backend is a plain Express app (`backend/server.js`). This repo ships a
+`render.yaml` blueprint at the repo root pre-wired for it:
 
-- **Simplest**: [Render](https://render.com) or [Railway](https://railway.app) —
-  connect the repo, set the root to `gvcda-app/backend`, build command
-  `npm install`, start command `npm start`, add the `.env` vars in their dashboard.
-  Both give you a persistent disk you can point `DB_PATH` at (see below).
-- **More control**: a small VPS (DigitalOcean/AWS Lightsail), run with
-  [PM2](https://pm2.keymetrics.io/) (`pm2 start server.js --name gvcda-backend`)
-  behind Nginx as a reverse proxy for TLS.
+1. Push this repo to GitHub (already done — `github.com/santhoshgr3/APP`).
+2. In the [Render dashboard](https://dashboard.render.com), **New → Blueprint**,
+   pick this repo. Render reads `render.yaml` and creates the `gvcda-backend`
+   web service on the **Starter** plan (~$7/mo — needed for the persistent disk
+   below; the free plan's disk is wiped on every restart/deploy, which would
+   silently reset your SQLite database).
+3. Render generates `JWT_SECRET` for you automatically (`generateValue: true`
+   in the blueprint). Fill in the rest it left blank in the dashboard's
+   Environment tab:
+   - `CORS_ORIGIN` → your Vercel URL, e.g. `https://gvcda.vercel.app`
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET` → see §1a below
+   - `MSG91_*` or `TWILIO_*` → only once you're ready for real SMS (see §2)
+4. First deploy: SSH in via Render's **Shell** tab and run `npm run seed` once
+   to create demo data on the fresh disk (`DB_PATH=/var/data/gvcda.db` is
+   already set for you by the blueprint) — or skip it and let the app start
+   with an empty database if you don't want the demo accounts in production.
+
+No blueprint? You can set this up by hand instead — connect the repo, set
+**Root Directory** to `gvcda-app/backend`, build command `npm install`, start
+command `npm start`, add a disk mounted at `/var/data`, and set `DB_PATH` to
+`/var/data/gvcda.db` plus the env vars above.
 
 **Database**: SQLite (current setup) is genuinely fine in production at this
 app's expected scale — it's not a toy choice — as long as the `.db` file lives on
-**persistent** disk (not container ephemeral storage) and you back it up. Use
-[Litestream](https://litestream.io/) to continuously stream backups to S3/GCS for
-free, or just cron a daily copy somewhere safe. Only move to PostgreSQL if you
-outgrow single-writer throughput (unlikely until you're at real regional scale) —
-the schema in `backend/db.js` translates to Postgres almost column-for-column if
-that day comes.
+Render's **persistent disk** (set up by the blueprint) and you back it up. Use
+[Litestream](https://litestream.io/) to continuously stream backups to S3/GCS
+(or Supabase Storage) for free, or just cron a daily copy somewhere safe.
 
-**Uploaded photos**: retailer storefront and product photos save to
-`backend/uploads/` on local disk (`lib/uploads.js`) and are served back out at
-`/uploads/<filename>` — genuinely working, not a stub. Same rule as the
-database: put it on persistent disk and back it up. The one thing this setup
-*can't* do is scale to more than one backend instance (a file uploaded to
-instance A wouldn't be visible from instance B) — if you ever run multiple
-instances behind a load balancer, that's the point to swap `lib/uploads.js` for
-an S3/GCS-backed version; every route that touches uploads calls only the
-functions this file exports, so the swap stays contained to one file.
-
-**Required env vars in production** (`backend/.env`, see `backend/.env.example`):
+**Required env vars in production** (`backend/.env`, see `backend/.env.example`
+— all pre-filled by `render.yaml` if you used the blueprint):
 ```
 NODE_ENV=production
 JWT_SECRET=<generate with: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
-CORS_ORIGIN=https://app.gvcdaservicehub.com
+CORS_ORIGIN=https://gvcda.vercel.app
 ```
 The backend **will refuse to boot** without `JWT_SECRET` in production, and will
 refuse to fake OTP/payments in production if you haven't configured a real
 provider — this is deliberate, so you can't accidentally ship the demo mode.
 
-## 4. Hosting the web app
+### 3a. Photo storage — Supabase Storage
 
-`frontend/` is a static Vite build:
-```bash
-cd frontend
-echo "VITE_API_URL=https://api.gvcdaservicehub.com" > .env.production
-npm run build        # outputs frontend/dist
-```
-Deploy `dist/` to [Vercel](https://vercel.com), [Netlify](https://netlify.com), or
-any static host / CDN. Point your domain at it, and make sure `CORS_ORIGIN` on the
-backend includes that domain.
+Retailer storefront and product photos go through `backend/lib/uploads.js`,
+which has two modes:
+- **Local dev (default, zero setup)**: files save to `backend/uploads/` on
+  disk and serve back out at `/uploads/<filename>`. This is what you've been
+  testing against and it's what stays active if `SUPABASE_URL` /
+  `SUPABASE_SERVICE_ROLE_KEY` are unset.
+- **Production (Supabase Storage)**: set both env vars and every upload goes
+  straight to Supabase's own CDN instead — no dependency on Render's disk for
+  this, and it scales past one backend instance if you ever need that.
+
+To turn it on:
+1. In your [Supabase](https://supabase.com) project → **Storage**, create a
+   new bucket named `gvcda-photos` (or pick your own name and set
+   `SUPABASE_BUCKET` to match) and mark it **Public** — photos need to load
+   directly in `<img>` tags without a signed URL.
+2. Project Settings → API → copy the **Project URL** and the **service_role**
+   secret key (not the `anon` key — uploads need the elevated one).
+3. Set on Render: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET`.
+
+That's the entire integration — no other code changes needed, and every route
+that touches photos already calls only the functions this one file exports.
+
+## 4. Hosting the web app — Vercel
+
+This repo ships a `vercel.json` at the repo root that points at `frontend/`
+inside the monorepo, so you can import the repo as-is without reconfiguring
+anything in the dashboard:
+
+1. In [Vercel](https://vercel.com), **Add New → Project**, import
+   `github.com/santhoshgr3/APP`. Leave the root directory as the repo root —
+   `vercel.json` handles the `cd gvcda-app/frontend` for you.
+2. Add one environment variable: `VITE_API_URL` → your Render backend URL,
+   e.g. `https://gvcda-backend.onrender.com`.
+3. Deploy. Then go back to Render and set `CORS_ORIGIN` to whatever domain
+   Vercel gave you (or your custom domain once you attach one).
 
 ## 5. Publishing the mobile app
 
@@ -161,9 +189,6 @@ legal identity/business and payment):
       default on every retailer — `commission_pct` on the `retailers` table).
 - [ ] Decide real incentive rates for field employees (currently ₹50/membership,
       ₹150/retailer — `routes/employee.js`, `INCENTIVE_PER_MEMBERSHIP`/`_RETAILER`).
-- [ ] Retailer/product photo upload isn't wired yet (no file storage integration) —
-      add S3/GCS + multipart upload handling if you need it before launch, or ship
-      without photos for v1 and add it after.
 - [ ] Run through the OTP rate limits (`routes/auth.js`) with your expected traffic
       in mind — 5 requests per 15 minutes per phone+IP is a reasonable default but
       tune it if it's too strict for your rollout (e.g. field employees enrolling

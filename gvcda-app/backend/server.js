@@ -6,7 +6,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
-const { UPLOAD_DIR } = require("./lib/uploads");
+const { UPLOAD_DIR, useSupabase } = require("./lib/uploads");
 require("./db"); // ensures schema is created on boot
 
 const isProd = process.env.NODE_ENV === "production";
@@ -23,12 +23,16 @@ app.use(morgan(isProd ? "combined" : "dev"));
 const corsOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()) : true;
 app.use(cors({ origin: corsOrigins }));
 
-// Uploaded photos, served back out as plain static files. Mounted ahead of
-// express.json() (uploads go through multer, not JSON body parsing) and with
-// Cross-Origin-Resource-Policy relaxed — helmet's default "same-origin" would
-// otherwise block the web app (on a different port/origin) and the mobile app
-// from loading these <img> sources at all.
-app.use("/uploads", (req, res, next) => { res.set("Cross-Origin-Resource-Policy", "cross-origin"); next(); }, express.static(UPLOAD_DIR, { maxAge: "7d" }));
+// Uploaded photos, served back out as plain static files — only when storage
+// is local disk (lib/uploads.js's dev fallback). When Supabase Storage is
+// configured, photo URLs point straight at Supabase's own CDN instead, so
+// there's nothing to mount here. Placed ahead of express.json() (uploads go
+// through multer, not JSON body parsing) and with Cross-Origin-Resource-Policy
+// relaxed — helmet's default "same-origin" would otherwise block the web app
+// (on a different port/origin) and the mobile app from loading these <img> sources.
+if (!useSupabase) {
+  app.use("/uploads", (req, res, next) => { res.set("Cross-Origin-Resource-Policy", "cross-origin"); next(); }, express.static(UPLOAD_DIR, { maxAge: "7d" }));
+}
 
 app.use(express.json({ limit: "1mb" }));
 
