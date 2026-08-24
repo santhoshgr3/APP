@@ -1,0 +1,28 @@
+# Local shortcuts to source docs in Downloads — machine-specific, not useful in the repo
+*.lnk
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.local
+.env.production
+
+# Backend SQLite database (seeded fresh via `node db.js --seed`)
+*.db
+*.db-journal
+
+# Build output
+dist/
+build/
+web-build/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+
+# OS
+.DS_Store
+Thumbs.db

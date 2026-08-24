@@ -1,0 +1,109 @@
+import React from "react";
+import { ChevronLeft } from "lucide-react";
+
+export const T = {
+  teal: "#0E5E5C", tealDark: "#093F3E", tealLight: "#EAF3F2",
+  terracotta: "#C1652F", terracottaLight: "#F7E7DB",
+  gold: "#D4A017", goldLight: "#FBF1DA",
+  red: "#B23A48", redLight: "#F7E4E6",
+  cream: "#FBF7F0", ink: "#1E2523", inkSoft: "#5B655F", line: "#E7E0D3",
+};
+
+export function TopBar({ title, subtitle, onBack, right }) {
+  return (
+    <div style={{ background: T.tealDark, padding: "16px 20px 14px", color: "#fff", flexShrink: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          {onBack && (
+            <button onClick={onBack} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+              <ChevronLeft size={16} color="#fff" />
+            </button>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 700, fontSize: 17 }}>{title}</div>
+            {subtitle && <div style={{ fontSize: 12, opacity: 0.75, marginTop: 1 }}>{subtitle}</div>}
+          </div>
+        </div>
+        {right}
+      </div>
+    </div>
+  );
+}
+
+export function BottomTabs({ tabs, active, onChange }) {
+  return (
+    <div style={{ display: "flex", borderTop: `1px solid ${T.line}`, background: "#fff", flexShrink: 0 }}>
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button key={id} onClick={() => onChange(id)} style={{
+          flex: 1, border: "none", background: "none", cursor: "pointer", padding: "10px 0 9px",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+        }}>
+          <Icon size={19} color={active === id ? T.teal : T.inkSoft} />
+          <span style={{ fontSize: 10, fontWeight: active === id ? 700 : 500, color: active === id ? T.teal : T.inkSoft }}>{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Chip({ children, tone = "teal" }) {
+  const map = {
+    teal: [T.tealLight, T.teal], gold: [T.goldLight, "#8A6A0C"],
+    red: [T.redLight, T.red], terracotta: [T.terracottaLight, T.terracotta],
+  };
+  const [bg, fg] = map[tone];
+  return <span style={{ fontSize: 10.5, padding: "3px 10px", borderRadius: 20, background: bg, color: fg, fontWeight: 700 }}>{children}</span>;
+}
+
+export function Card({ children, style, onClick }) {
+  return <div onClick={onClick} style={{ background: "#fff", border: `1px solid ${T.line}`, borderRadius: 12, padding: 12, ...style }}>{children}</div>;
+}
+
+export function Btn({ children, onClick, variant = "primary", full, style, disabled, type = "button" }) {
+  const styles = {
+    primary: { background: disabled ? "#B7C6C5" : T.teal, color: "#fff", border: "none" },
+    secondary: { background: "#fff", color: T.teal, border: `1px solid ${T.teal}` },
+    danger: { background: "#fff", color: T.red, border: `1px solid ${T.red}` },
+    ghost: { background: "#fff", color: T.inkSoft, border: `1px solid ${T.line}` },
+  };
+  return (
+    <button type={type} onClick={disabled ? undefined : onClick} style={{
+      ...styles[variant], borderRadius: 9, padding: "10px 14px", fontSize: 13, fontWeight: 700,
+      cursor: disabled ? "not-allowed" : "pointer", width: full ? "100%" : "auto",
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 6, ...style,
+    }}>{children}</button>
+  );
+}
+
+export function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: T.inkSoft, marginBottom: 5 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+export const inputStyle = { width: "100%", border: `1px solid ${T.line}`, borderRadius: 8, padding: "9px 11px", fontSize: 13, color: T.ink, background: "#fff", boxSizing: "border-box" };
+
+export function EmptyState({ icon: Icon, text }) {
+  return (
+    <div style={{ textAlign: "center", padding: "40px 20px", color: T.inkSoft }}>
+      <Icon size={28} color={T.line} style={{ marginBottom: 10 }} />
+      <div style={{ fontSize: 13 }}>{text}</div>
+    </div>
+  );
+}
+
+export function Screen({ children }) {
+  return <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>{children}</div>;
+}
+
+export function LoadingScreen({ text = "Loading..." }) {
+  return <Screen><div style={{ textAlign: "center", padding: 60, color: T.inkSoft, fontSize: 13 }}>{text}</div></Screen>;
+}
+
+export function ErrorBanner({ message }) {
+  if (!message) return null;
+  return <div style={{ background: T.redLight, color: T.red, padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 12 }}>{message}</div>;
+}
