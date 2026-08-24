@@ -14,6 +14,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Pinned so Render doesn't pick a bleeding-edge Node version that lacks
+      # prebuilt binaries for better-sqlite3's native addon (it'd otherwise try
+      # to compile from source and fail against a newer V8 API). 22 is current
+      # LTS and matches what this app was built/tested against.
+      - key: NODE_VERSION
+        value: 22
       - key: DB_PATH
         value: /var/data/gvcda.db
       - key: JWT_SECRET
