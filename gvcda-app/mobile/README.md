@@ -1,8 +1,8 @@
 # GVCDA Mobile App (Expo / React Native)
 
 The real mobile client for Member, Employee and Retailer — one app, role resolved
-after OTP login, exactly per the PRD's architecture. Admin stays a web dashboard
-(see `../frontend`). Talks to the same backend as the web app (`../backend`).
+after phone+password login, exactly per the PRD's architecture. Admin stays a web
+dashboard (see `../frontend`). Talks to the same backend as the web app (`../backend`).
 
 ## Running it
 
@@ -36,7 +36,7 @@ Wi-Fi network — `localhost` from a phone means the phone itself, not this comp
 
 ## Demo accounts
 
-Same seed data as the web app — OTP is always `123456`:
+Same seed data as the web app — password is always `gvcda123`:
 
 | Phone | Role |
 |---|---|
@@ -52,7 +52,7 @@ Same seed data as the web app — OTP is always `123456`:
 
 Every screen from the Screen Specification doc for Member, Employee and Retailer:
 
-- **Shared**: Splash, Login/OTP, Registration + location picker, Plan selection,
+- **Shared**: Splash, Login/Register (phone+password), Registration + location picker, Plan selection,
   Payment (real bank/UPI-transfer QR flow, see below), Role Switcher (Profile
   tab, dual-role accounts only)
 - **Member**: Home (sectors + nearby retailers + digital card), Sector detail,
@@ -99,5 +99,5 @@ mobile/
 
 ## Known limits (same as the web app's backend)
 
-- OTP is fixed at `123456` (dev mode) — configure `MSG91_*`/`TWILIO_*` env vars on the backend for real SMS delivery in production.
+- Demo password is fixed at `gvcda123` for seeded accounts — no SMS/OTP provider involved at all.
 - Payment verification is manual — an Admin checks each UTR against the bank statement by hand (no gateway/webhook to auto-confirm).

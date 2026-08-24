@@ -46,10 +46,11 @@ export function photoUrl(filename) {
 
 export const api = {
   // auth
-  requestOtp: (phone) => request("/auth/request-otp", { method: "POST", body: { phone }, auth: false }),
-  verifyOtp: (phone, otp, full_name) => request("/auth/verify-otp", { method: "POST", body: { phone, otp, full_name }, auth: false }),
+  register: (phone, password, full_name) => request("/auth/register", { method: "POST", body: { phone, password, full_name }, auth: false }),
+  login: (phone, password) => request("/auth/login", { method: "POST", body: { phone, password }, auth: false }),
   me: () => request("/auth/me"),
   switchRole: (role) => request("/auth/switch-role", { method: "POST", body: { role } }),
+  changePassword: (current_password, new_password) => request("/auth/change-password", { method: "POST", body: { current_password, new_password } }),
 
   // locations
   districts: () => request("/locations/districts", { auth: false }),

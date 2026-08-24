@@ -17,10 +17,10 @@ const DEMO_ACCOUNTS = [
 
 export default function LoginScreen({ navigation }) {
   const { login } = useAuth();
-  const [step, setStep] = useState("phone");
+  const [mode, setMode] = useState("login"); // "login" | "register"
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [devOtp, setDevOtp] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showServer, setShowServer] = useState(false);
@@ -30,20 +30,10 @@ export default function LoginScreen({ navigation }) {
 
   const saveServer = async (url) => { setServerUrl(url); await setApiUrl(url); };
 
-  const sendOtp = async () => {
+  const submit = async () => {
     setError(""); setLoading(true);
     try {
-      const res = await api.requestOtp(phone);
-      setDevOtp(res.dev_otp);
-      setStep("otp");
-    } catch (e) { setError(e.message); }
-    setLoading(false);
-  };
-
-  const verify = async () => {
-    setError(""); setLoading(true);
-    try {
-      const res = await api.verifyOtp(phone, otp);
+      const res = mode === "login" ? await api.login(phone, password) : await api.register(phone, password, fullName);
       await login(res.token, res.user, res.roles);
       if (res.is_new_user) {
         navigation.replace("Registration");
@@ -54,6 +44,8 @@ export default function LoginScreen({ navigation }) {
     setLoading(false);
   };
 
+  const canSubmit = phone.length === 10 && password.length >= 6 && (mode === "login" || fullName.trim()) && !loading;
+
   return (
     <Screen>
       <View style={{ alignItems: "center", paddingTop: 30, marginBottom: 26 }}>
@@ -63,43 +55,45 @@ export default function LoginScreen({ navigation }) {
 
       <ErrorBanner message={error} />
 
-      {step === "phone" ? (
-        <>
-          <Field label="Mobile number">
-            <Input keyboardType="number-pad" maxLength={10} placeholder="9000000003 (demo member)" value={phone} onChangeText={setPhone} />
-          </Field>
-          <Btn full onPress={sendOtp} disabled={phone.length < 10 || loading}>{loading ? "Sending..." : "Send OTP"}</Btn>
+      {mode === "register" && (
+        <Field label="Full name">
+          <Input value={fullName} onChangeText={setFullName} placeholder="Your name" />
+        </Field>
+      )}
+      <Field label="Mobile number">
+        <Input keyboardType="number-pad" maxLength={10} placeholder="9000000003 (demo member)" value={phone} onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))} />
+      </Field>
+      <Field label="Password">
+        <Input secureTextEntry placeholder={mode === "register" ? "At least 6 characters" : "••••••••"} value={password} onChangeText={setPassword} />
+      </Field>
 
-          <TouchableOpacity onPress={() => setShowServer((s) => !s)} style={{ marginTop: 18, flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Feather name="server" size={12} color={T.inkSoft} />
-            <Text style={{ fontSize: 11, color: T.inkSoft, fontWeight: "700" }}>Server: {serverUrl}</Text>
-          </TouchableOpacity>
-          {showServer && (
-            <View style={{ marginTop: 8 }}>
-              <Input value={serverUrl} onChangeText={saveServer} autoCapitalize="none" placeholder="http://<your-lan-ip>:4000" />
-              <Text style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 6 }}>
-                Expo Go can't reach "localhost" — point this at your computer's LAN IP where the backend is running.
-              </Text>
-            </View>
-          )}
+      <Btn full onPress={submit} disabled={!canSubmit}>
+        {loading ? (mode === "login" ? "Logging in..." : "Creating account...") : (mode === "login" ? "Log In" : "Create Account")}
+      </Btn>
+      <Btn full variant="ghost" onPress={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} style={{ marginTop: 8 }}>
+        {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
+      </Btn>
 
-          <View style={{ marginTop: 18, backgroundColor: "#fff", borderRadius: 10, borderWidth: 1, borderColor: T.line, padding: 12 }}>
-            <Text style={{ fontSize: 11, fontWeight: "700", color: T.ink, marginBottom: 6 }}>Demo accounts (seeded)</Text>
-            {DEMO_ACCOUNTS.map(([num, label]) => (
-              <Text key={num} style={{ fontSize: 10.5, color: T.inkSoft, lineHeight: 17 }}>{num} — {label}</Text>
-            ))}
-            <Text style={{ fontSize: 10.5, color: T.inkSoft, lineHeight: 17, marginTop: 2 }}>Any new number — self-signup as a new Member</Text>
-          </View>
-        </>
-      ) : (
-        <>
-          <Field label={`OTP sent to ${phone}`}>
-            <Input keyboardType="number-pad" maxLength={6} placeholder="123456" value={otp} onChangeText={setOtp} />
-          </Field>
-          <Text style={{ fontSize: 11, color: T.gold, marginBottom: 14 }}>Dev mode — OTP is always {devOtp} (no real SMS sent).</Text>
-          <Btn full onPress={verify} disabled={otp.length < 6 || loading}>{loading ? "Verifying..." : "Verify & Continue"}</Btn>
-          <Btn full variant="ghost" onPress={() => setStep("phone")} style={{ marginTop: 8 }}>Change number</Btn>
-        </>
+      <TouchableOpacity onPress={() => setShowServer((s) => !s)} style={{ marginTop: 18, flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Feather name="server" size={12} color={T.inkSoft} />
+        <Text style={{ fontSize: 11, color: T.inkSoft, fontWeight: "700" }}>Server: {serverUrl}</Text>
+      </TouchableOpacity>
+      {showServer && (
+        <View style={{ marginTop: 8 }}>
+          <Input value={serverUrl} onChangeText={saveServer} autoCapitalize="none" placeholder="http://<your-lan-ip>:4000" />
+          <Text style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 6 }}>
+            Expo Go can't reach "localhost" — point this at your computer's LAN IP where the backend is running.
+          </Text>
+        </View>
+      )}
+
+      {mode === "login" && (
+        <View style={{ marginTop: 18, backgroundColor: "#fff", borderRadius: 10, borderWidth: 1, borderColor: T.line, padding: 12 }}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: T.ink, marginBottom: 6 }}>Demo accounts (seeded) — password gvcda123</Text>
+          {DEMO_ACCOUNTS.map(([num, label]) => (
+            <Text key={num} style={{ fontSize: 10.5, color: T.inkSoft, lineHeight: 17 }}>{num} — {label}</Text>
+          ))}
+        </View>
       )}
     </Screen>
   );

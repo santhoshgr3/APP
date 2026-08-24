@@ -36,6 +36,24 @@ if (!useSupabase) {
 
 app.use(express.json({ limit: "1mb" }));
 
+// Defense in depth: route handlers query `users` with SELECT * in several places
+// (member.js, employee.js, admin.js, auth.js) for convenience, which would include
+// password_hash. Strip it here at the response boundary so a missed call site
+// can never leak a hash to a client, instead of relying on every handler to
+// remember to exclude it.
+function stripPasswordHash(value) {
+  if (Array.isArray(value)) return value.forEach(stripPasswordHash);
+  if (value && typeof value === "object") {
+    if ("password_hash" in value) delete value.password_hash;
+    Object.values(value).forEach(stripPasswordHash);
+  }
+}
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (body) => { stripPasswordHash(body); return originalJson(body); };
+  next();
+});
+
 // A generous general limiter (routes with tighter needs, like OTP requests,
 // layer their own stricter limiter on top — see routes/auth.js).
 app.use(rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false }));

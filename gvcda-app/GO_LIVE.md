@@ -44,29 +44,20 @@ same QR/bank-transfer flow from their Earnings screen's "Settle Now" button.
 `orders.commission_settled` and the `payment_requests` table (type
 `commission_settlement`) track what's been paid.
 
-## 2. SMS OTP
+## 2. Auth — phone + password (no SMS provider needed)
 
-**What the code already does:** `backend/lib/sms.js` has working MSG91 and Twilio
-integrations, real HTTP calls with correct auth. Falls back to logging the OTP
-(never sends real SMS) when neither is configured.
+Auth is phone number + password, not OTP — there is no SMS/DLT dependency at
+all. `routes/auth.js` hashes passwords with bcrypt, rate-limits login attempts
+(10/15min per phone+IP) and new-account creation (10/hour per IP). Self-signup
+via `/auth/register` always creates a Member account; Employee accounts are
+created by an Admin via the web dashboard's "Add Employee" form (which sets a
+temporary password the Admin hands to the employee); Retailer role is added on
+top of an existing Member login via retailer self-registration.
 
-**What you need to do — pick one:**
-
-**MSG91** (India, cheapest for Indian numbers, but has a mandatory regulatory step):
-1. Sign up at [msg91.com](https://msg91.com).
-2. **DLT registration** (required by Indian telecom law for any transactional/OTP
-   SMS): register as a Principal Entity on your telecom operator's DLT platform
-   (or MSG91 can do this for you), then register your OTP message template and
-   get a Template ID. This step alone can take 3–7 days and needs a GST number.
-3. Set in `backend/.env`: `MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID`, `MSG91_SENDER_ID`.
-
-**Twilio** (simpler signup, more expensive per SMS, works internationally):
-1. Sign up at [twilio.com](https://twilio.com), buy a phone number.
-2. Set in `backend/.env`: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`.
-
-Either way, OTPs become real random 6-digit codes the moment a provider is
-configured (see `generateOtp()` in `routes/auth.js`) — the fixed `123456` is only
-ever used when nothing is configured.
+**What you need to do:** nothing — this is genuinely live already. If you want
+a "forgot password" flow later, that's the point where you'd need an SMS or
+email provider (to deliver a reset code), but it isn't required to operate
+today.
 
 ## 3. The database — Supabase Postgres
 
@@ -103,7 +94,6 @@ The backend is a plain Express app (`backend/server.js`). This repo ships a
    - `DATABASE_URL` → from §3 above
    - `CORS_ORIGIN` → your Vercel URL, e.g. `https://gvcda.vercel.app`
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_BUCKET` → see §4a below
-   - `MSG91_*` or `TWILIO_*` → only once you're ready for real SMS (see §2)
 
 No blueprint? You can set this up by hand instead — connect the repo, set
 **Root Directory** to `gvcda-app/backend`, build command `npm install`, start
@@ -118,8 +108,8 @@ JWT_SECRET=<generate with: node -e "console.log(require('crypto').randomBytes(48
 CORS_ORIGIN=https://gvcda.vercel.app
 ```
 The backend **will refuse to boot** without `DATABASE_URL` or `JWT_SECRET` in
-production, and will refuse to fake OTP/payments without a real provider
-configured — this is deliberate, so you can't accidentally ship the demo mode.
+production — this is deliberate, so you can't accidentally ship without a real
+signing secret.
 
 ### 4a. Photo storage — Supabase Storage
 
@@ -197,10 +187,11 @@ legal identity/business and payment):
       default on every retailer — `commission_pct` on the `retailers` table).
 - [ ] Decide real incentive rates for field employees (currently ₹50/membership,
       ₹150/retailer — `routes/employee.js`, `INCENTIVE_PER_MEMBERSHIP`/`_RETAILER`).
-- [ ] Run through the OTP rate limits (`routes/auth.js`) with your expected traffic
-      in mind — 5 requests per 15 minutes per phone+IP is a reasonable default but
-      tune it if it's too strict for your rollout (e.g. field employees enrolling
-      many members from one IP/device in a day).
+- [ ] Run through the login/register rate limits (`routes/auth.js`) with your
+      expected traffic in mind — 10 login attempts per 15 minutes per phone+IP,
+      10 new accounts per hour per IP, are reasonable defaults but tune them if
+      too strict for your rollout (e.g. field employees enrolling many members
+      from one IP/device in a day).
 - [ ] Load-test if you expect a big-bang launch (a district-wide announcement, a
       TV/radio spot) rather than organic growth — Supabase's free tier Postgres
       handles moderate concurrent load fine, but a sudden spike is a different
@@ -208,10 +199,11 @@ legal identity/business and payment):
 
 ## What I can't do for you
 
-Signing up for MSG91/Twilio, Apple Developer, or Google Play requires your
-business's legal identity and payment — none of that can be delegated to an AI
-assistant, by design (these are exactly the kind of credential/account-creation
-actions this assistant is built to refuse). Payments don't need a new signup —
-your existing bank account is already wired in. Everything else — the code, the
-config, the deployment steps — is done or ready to go the moment you have those
-remaining credentials in hand.
+Signing up for Apple Developer or Google Play requires your business's legal
+identity and payment — none of that can be delegated to an AI assistant, by
+design (these are exactly the kind of credential/account-creation actions this
+assistant is built to refuse). Payments don't need a new signup — your existing
+bank account is already wired in, and auth doesn't need one either now that
+it's phone+password. Everything else — the code, the config, the deployment
+steps — is done or ready to go the moment you have those remaining credentials
+in hand.

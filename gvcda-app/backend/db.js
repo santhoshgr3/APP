@@ -1,5 +1,6 @@
 require("dotenv").config();
 const { Pool } = require("pg");
+const bcrypt = require("bcryptjs");
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL must be set — this app runs on Supabase/Postgres. See .env.example.");
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS villages (
 CREATE TABLE IF NOT EXISTS users (
   user_id SERIAL PRIMARY KEY,
   phone TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL DEFAULT '',
   full_name TEXT,
   role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','employee','retailer','admin')),
   village_id INTEGER REFERENCES villages(village_id),
@@ -83,6 +85,10 @@ CREATE TABLE IF NOT EXISTS users (
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Safety net for databases seeded before password auth existed (fresh installs
+-- already get the column from CREATE TABLE above; this is a no-op there).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT '';
 
 -- A user's phone/OTP session is one login, but the account can hold more than one
 -- role at once (e.g. Member + Retailer). users.role is the "default/active" role
@@ -288,28 +294,57 @@ async function seed() {
   const districtCount = (await get("SELECT COUNT(*) c FROM districts")).c;
   if (Number(districtCount) > 0) { console.log("Already seeded."); return; }
 
-  const LOCATIONS = {
-    Hyderabad: { Amberpet: ["Amberpet Town"], Secunderabad: ["Marredpally", "Bowenpally"] },
-    Rangareddy: { Shamshabad: ["Shamshabad", "Adibatla"], Ibrahimpatnam: ["Ibrahimpatnam", "Yacharam"] },
-    Warangal: { Hanamkonda: ["Hanamkonda", "Kazipet"], Narsampet: ["Narsampet", "Duggondi"] },
-    Nizamabad: { Bodhan: ["Bodhan", "Rajampet"], Armoor: ["Armoor", "Bibipet"] },
-  };
-  const villageIds = {}; // "Village Name" -> id (demo dataset has unique names)
-  const mandalIds = {};  // "Mandal Name" -> id
-  const districtIds = {}; // "District Name" -> id
+  // Full Telangana District → Mandal → Village hierarchy from the Local Government
+  // Directory (lgdirectory.gov.in), via data.gov.in's open LGD dataset — 33 districts,
+  // 585 mandals, ~11,200 villages. See backend/data/telangana_locations.json.
+  const LOCATIONS = require("./data/telangana_locations.json");
+
+  // mandalIds/villageIds are namespaced ("District::Mandal" / "District::Mandal::Village")
+  // because mandal and village names are NOT unique across the whole state (14 mandal
+  // names and several village names repeat in different districts/mandals) — only
+  // district names are state-wide unique.
+  const villageIds = {};
+  const mandalIds = {};
+  const districtIds = {};
+
+  // Bulk-insert villages in chunks — one row per query would be ~11,200 network
+  // round-trips to Supabase and take minutes; batching keeps this a few seconds.
+  const VILLAGE_CHUNK = 500;
 
   for (const [district, mandals] of Object.entries(LOCATIONS)) {
     const dId = (await run("INSERT INTO districts (name) VALUES (?) RETURNING district_id", [district])).lastInsertRowid;
     districtIds[district] = dId;
+
+    const mandalNames = Object.keys(mandals);
+    if (!mandalNames.length) continue;
+    const mandalPlaceholders = mandalNames.map(() => "(?, ?)").join(",");
+    const mandalParams = mandalNames.flatMap((name) => [dId, name]);
+    const mandalRows = await all(
+      `INSERT INTO mandals (district_id, name) VALUES ${mandalPlaceholders} RETURNING mandal_id, name`,
+      mandalParams
+    );
+    for (const row of mandalRows) mandalIds[`${district}::${row.name}`] = row.mandal_id;
+
     for (const [mandal, villages] of Object.entries(mandals)) {
-      const mId = (await run("INSERT INTO mandals (district_id, name) VALUES (?, ?) RETURNING mandal_id", [dId, mandal])).lastInsertRowid;
-      mandalIds[mandal] = mId;
-      for (const v of villages) {
-        const vId = (await run("INSERT INTO villages (mandal_id, name, type) VALUES (?, ?, ?) RETURNING village_id", [mId, v, "village"])).lastInsertRowid;
-        villageIds[v] = vId;
+      const mId = mandalIds[`${district}::${mandal}`];
+      for (let i = 0; i < villages.length; i += VILLAGE_CHUNK) {
+        const chunk = villages.slice(i, i + VILLAGE_CHUNK);
+        const placeholders = chunk.map(() => "(?, ?, 'village')").join(",");
+        const params = chunk.flatMap((name) => [mId, name]);
+        const rows = await all(
+          `INSERT INTO villages (mandal_id, name, type) VALUES ${placeholders} RETURNING village_id, name`,
+          params
+        );
+        for (const row of rows) villageIds[`${district}::${mandal}::${row.name}`] = row.village_id;
       }
     }
   }
+
+  // Convenience aliases so the demo-account inserts below don't need the full
+  // namespaced keys — real LGD villages under Hyderabad's Amberpet/Marredpally mandals.
+  const AMBERPET_VILLAGE_ID = villageIds["Hyderabad::Amberpet::Amberpet"];
+  const MARREDPALLY_VILLAGE_ID = villageIds["Hyderabad::Marredpally::Marredpally"];
+  const AMBERPET_MANDAL_ID = mandalIds["Hyderabad::Amberpet"];
 
   // planIds keyed by name, not assumed to be 1/2/3 — Postgres SERIAL sequences
   // don't reset after a DELETE the way a fresh SQLite file would have, so a
@@ -325,10 +360,13 @@ async function seed() {
     catIds[c] = (await run("INSERT INTO retailer_categories (name) VALUES (?) RETURNING category_id", [c])).lastInsertRowid;
   }
 
+  const DEMO_PASSWORD = "gvcda123";
+  const demoPasswordHash = bcrypt.hashSync(DEMO_PASSWORD, 10);
+
   async function insertUser(phone, full_name, role, village_id, designation, territory_district_id, territory_mandal_id) {
     return (await run(
-      "INSERT INTO users (phone, full_name, role, village_id, designation, territory_district_id, territory_mandal_id) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING user_id",
-      [phone, full_name, role, village_id, designation, territory_district_id, territory_mandal_id]
+      "INSERT INTO users (phone, password_hash, full_name, role, village_id, designation, territory_district_id, territory_mandal_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING user_id",
+      [phone, demoPasswordHash, full_name, role, village_id, designation, territory_district_id, territory_mandal_id]
     )).lastInsertRowid;
   }
   async function addRole(user_id, role) {
@@ -338,13 +376,13 @@ async function seed() {
   const adminId = await insertUser("9000000001", "Admin HQ", "admin", null, null, null, null);
   await addRole(adminId, "admin");
 
-  const empId = await insertUser("9000000002", "Suresh Reddy", "employee", villageIds["Amberpet Town"], "mandal_sub_manager", districtIds["Hyderabad"], mandalIds["Amberpet"]);
+  const empId = await insertUser("9000000002", "Suresh Reddy", "employee", AMBERPET_VILLAGE_ID, "mandal_sub_manager", districtIds["Hyderabad"], AMBERPET_MANDAL_ID);
   await addRole(empId, "employee");
 
-  const memberId = await insertUser("9000000003", "Ramesh Kumar", "member", villageIds["Amberpet Town"], null, null, null);
+  const memberId = await insertUser("9000000003", "Ramesh Kumar", "member", AMBERPET_VILLAGE_ID, null, null, null);
   await addRole(memberId, "member");
 
-  const retailerUserId = await insertUser("9000000004", "Lakshmi Devi", "retailer", villageIds["Amberpet Town"], null, null, null);
+  const retailerUserId = await insertUser("9000000004", "Lakshmi Devi", "retailer", AMBERPET_VILLAGE_ID, null, null, null);
   await addRole(retailerUserId, "retailer");
 
   // Demo membership for Ramesh
@@ -356,7 +394,7 @@ async function seed() {
   // Demo approved retailer with products
   const retailerId = (await run(
     "INSERT INTO retailers (user_id, business_name, category_id, village_id, phone, address, hours, description, onboarded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'self', 'approved') RETURNING retailer_id",
-    [retailerUserId, "Sri Lakshmi Grocery", catIds["Grocery"], villageIds["Amberpet Town"], "9000000004", "Main Road, Amberpet Town", "8:00 AM - 9:00 PM daily", "Your neighbourhood grocery store — fresh staples at member discount prices."]
+    [retailerUserId, "Sri Lakshmi Grocery", catIds["Grocery"], AMBERPET_VILLAGE_ID, "9000000004", "Main Road, Amberpet", "8:00 AM - 9:00 PM daily", "Your neighbourhood grocery store — fresh staples at member discount prices."]
   )).lastInsertRowid;
 
   async function insertProduct(retailer_id, name, price) {
@@ -381,15 +419,15 @@ async function seed() {
 
   // A second retailer still pending approval (submitted by the employee)
   const retailer2UserPhone = "9000000005";
-  const retailer2UserId = await insertUser(retailer2UserPhone, "Venkat Rao", "retailer", villageIds["Amberpet Town"], null, null, null);
+  const retailer2UserId = await insertUser(retailer2UserPhone, "Venkat Rao", "retailer", AMBERPET_VILLAGE_ID, null, null, null);
   await addRole(retailer2UserId, "retailer");
   await run(
     "INSERT INTO retailers (user_id, business_name, category_id, village_id, phone, onboarded_by, onboarding_employee_id, status) VALUES (?, 'Venkat Electricals', ?, ?, ?, 'employee', ?, 'pending')",
-    [retailer2UserId, catIds["Services"], villageIds["Amberpet Town"], retailer2UserPhone, empId]
+    [retailer2UserId, catIds["Services"], AMBERPET_VILLAGE_ID, retailer2UserPhone, empId]
   );
 
   // Demo dual-role account: Member who is also an approved Retailer — exercises the Role Switcher
-  const dualUserId = await insertUser("9000000006", "Padma Naidu", "member", villageIds["Marredpally"], null, null, null);
+  const dualUserId = await insertUser("9000000006", "Padma Naidu", "member", MARREDPALLY_VILLAGE_ID, null, null, null);
   await addRole(dualUserId, "member");
   await addRole(dualUserId, "retailer");
   await run(
@@ -398,24 +436,24 @@ async function seed() {
   );
   const dualRetailerId = (await run(
     "INSERT INTO retailers (user_id, business_name, category_id, village_id, phone, address, onboarded_by, status) VALUES (?, 'Padma Tailoring & Services', ?, ?, ?, ?, 'self', 'approved') RETURNING retailer_id",
-    [dualUserId, catIds["Services"], villageIds["Marredpally"], "9000000006", "Near Bus Stop, Marredpally"]
+    [dualUserId, catIds["Services"], MARREDPALLY_VILLAGE_ID, "9000000006", "Near Bus Stop, Marredpally"]
   )).lastInsertRowid;
   await insertProduct(dualRetailerId, "Blouse Stitching", 250);
   await insertProduct(dualRetailerId, "Alterations", 80);
 
   // Demo jobs
   await run("INSERT INTO jobs (posted_by, title, job_type, description, village_id, pay) VALUES (?, ?, ?, ?, ?, ?)",
-    [empId, "Daily Wage — Construction Helper", "Daily Wage", "General labour on a residential building site. Tools provided.", villageIds["Amberpet Town"], "₹600/day"]);
+    [empId, "Daily Wage — Construction Helper", "Daily Wage", "General labour on a residential building site. Tools provided.", AMBERPET_VILLAGE_ID, "₹600/day"]);
   await run("INSERT INTO jobs (posted_by, title, job_type, description, village_id, pay) VALUES (?, ?, ?, ?, ?, ?)",
-    [empId, "Retail Sales Associate", "Company Job", "Grocery store floor staff, customer service and billing.", villageIds["Marredpally"], "₹14,000/mo"]);
+    [empId, "Retail Sales Associate", "Company Job", "Grocery store floor staff, customer service and billing.", MARREDPALLY_VILLAGE_ID, "₹14,000/mo"]);
 
   // Demo field visit + complaint so those screens aren't empty on first look
   await run("INSERT INTO field_visits (employee_id, village_id, purpose, notes) VALUES (?, ?, 'enrolment', ?)",
-    [empId, villageIds["Amberpet Town"], "Enrolled Ramesh Kumar, Standard plan."]);
+    [empId, AMBERPET_VILLAGE_ID, "Enrolled Ramesh Kumar, Standard plan."]);
   await run("INSERT INTO complaints (raised_by, category, description) VALUES (?, 'Order Issue', ?)",
     [memberId, "Order was delayed by two days past the promised date."]);
 
-  console.log("Seed complete.");
+  console.log(`Seed complete. Locations: ${Object.keys(LOCATIONS).length} districts, ${Object.keys(mandalIds).length} mandals, ${Object.keys(villageIds).length} villages.`);
   console.log("Demo phone numbers:");
   console.log("  Admin:    9000000001");
   console.log("  Employee: 9000000002 (Mandal Sub Manager, Amberpet)");
@@ -423,7 +461,7 @@ async function seed() {
   console.log("  Retailer: 9000000004 (Sri Lakshmi Grocery, approved)");
   console.log("  Retailer: 9000000005 (Venkat Electricals, pending approval)");
   console.log("  Member+Retailer: 9000000006 (Padma Naidu / Padma Tailoring — try the role switcher)");
-  console.log("OTP for all demo logins: 123456");
+  console.log(`Password for all demo logins: ${DEMO_PASSWORD}`);
 }
 
 // db.js is required at boot (server.js) purely to run createSchema(); routes

@@ -483,6 +483,7 @@ function UsersTab({ refreshKey, onAction }) {
 function AddEmployeeForm({ onDone }) {
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
   const [designation, setDesignation] = useState("volunteer");
   const [districts, setDistricts] = useState([]);
   const [mandals, setMandals] = useState([]);
@@ -496,9 +497,10 @@ function AddEmployeeForm({ onDone }) {
 
   const submit = async () => {
     if (!phone || !fullName) { setError("Phone and name are required"); return; }
+    if (password.length < 6) { setError("Temporary password must be at least 6 characters"); return; }
     setError(""); setSaving(true);
     try {
-      await api.addEmployee({ phone, full_name: fullName, designation, territory_district_id: districtId || null, territory_mandal_id: mandalId || null });
+      await api.addEmployee({ phone, full_name: fullName, password, designation, territory_district_id: districtId || null, territory_mandal_id: mandalId || null });
       onDone();
     } catch (e) { setError(e.message); }
     setSaving(false);
@@ -510,6 +512,7 @@ function AddEmployeeForm({ onDone }) {
       <Grid cols={2}>
         <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit number" /></Field>
         <Field label="Full name"><input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
+        <Field label="Temporary password"><input style={inputStyle} type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 6 characters — share with the employee" /></Field>
         <Field label="Designation">
           <select style={inputStyle} value={designation} onChange={(e) => setDesignation(e.target.value)}>
             <option value="district_manager">District Manager</option>

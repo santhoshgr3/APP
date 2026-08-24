@@ -83,7 +83,7 @@ export default function App() {
       <div style={{ textAlign: "center", maxWidth: 420 }}>
         <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 800, fontSize: 22, color: T.tealDark }}>GVCDA App</div>
         <div style={{ fontSize: 12.5, color: T.inkSoft, marginTop: 4 }}>
-          One app for Member, Employee and Retailer — role resolves after OTP login. Admin is a separate web dashboard.
+          One app for Member, Employee and Retailer — role resolves after login. Admin is a separate web dashboard.
         </div>
       </div>
       <PhoneFrame>

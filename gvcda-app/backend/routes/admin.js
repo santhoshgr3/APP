@@ -1,4 +1,5 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 const router = express.Router();
 const { get, all, run } = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
@@ -204,20 +205,23 @@ router.get("/users", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /admin/users { phone, full_name, designation, territory_district_id, territory_mandal_id, village_id }
-// Admin-created employee account.
+// POST /admin/users { phone, full_name, designation, territory_district_id, territory_mandal_id, village_id, password }
+// Admin-created employee account. `password` is the temporary login password Admin
+// hands to the new employee — they can change it later via /auth/change-password.
 router.post("/users", async (req, res, next) => {
   try {
-    const { phone, full_name, designation, territory_district_id, territory_mandal_id, village_id } = req.body;
+    const { phone, full_name, designation, territory_district_id, territory_mandal_id, village_id, password } = req.body;
     if (!phone || !full_name || !designation) return res.status(400).json({ error: "phone, full_name and designation required" });
+    if (!password || password.length < 6) return res.status(400).json({ error: "A temporary password (min 6 characters) is required" });
 
     let user = await get("SELECT * FROM users WHERE phone = ?", [phone]);
     if (user) return res.status(409).json({ error: "An account with this phone number already exists" });
 
+    const password_hash = await bcrypt.hash(password, 10);
     const result = await run(
-      `INSERT INTO users (phone, full_name, role, village_id, designation, territory_district_id, territory_mandal_id)
-       VALUES (?, ?, 'employee', ?, ?, ?, ?) RETURNING user_id`,
-      [phone, full_name, village_id || null, designation, territory_district_id || null, territory_mandal_id || null]
+      `INSERT INTO users (phone, password_hash, full_name, role, village_id, designation, territory_district_id, territory_mandal_id)
+       VALUES (?, ?, ?, 'employee', ?, ?, ?, ?) RETURNING user_id`,
+      [phone, password_hash, full_name, village_id || null, designation, territory_district_id || null, territory_mandal_id || null]
     );
     await run("INSERT INTO user_roles (user_id, role) VALUES (?, 'employee') ON CONFLICT DO NOTHING", [result.lastInsertRowid]);
 

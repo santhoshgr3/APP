@@ -26,18 +26,3 @@ services:
         sync: false
       - key: SUPABASE_BUCKET
         value: gvcda-photos
-      # Optional — SMS OTP providers (see ../gvcda-app/GO_LIVE.md §2). Leave unset
-      # to keep the fixed dev OTP (123456); the backend refuses to boot without
-      # JWT_SECRET but will keep working without these until you're ready for real SMS.
-      - key: MSG91_AUTH_KEY
-        sync: false
-      - key: MSG91_TEMPLATE_ID
-        sync: false
-      - key: MSG91_SENDER_ID
-        sync: false
-      - key: TWILIO_ACCOUNT_SID
-        sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: TWILIO_FROM_NUMBER
-        sync: false
