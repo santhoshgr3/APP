@@ -1,8 +1,0 @@
-{
-  "buildCommand": "cd gvcda-app/frontend && npm install && npm run build",
-  "outputDirectory": "gvcda-app/frontend/dist",
-  "installCommand": "echo 'skipped — buildCommand installs inside gvcda-app/frontend'",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
