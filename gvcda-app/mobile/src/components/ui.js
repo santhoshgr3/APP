@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { T } from "../theme";
@@ -122,6 +122,28 @@ export function ErrorBanner({ message }) {
 
 export function SectionTitle({ children, style }) {
   return <Text style={[styles.sectionTitle, style]}>{children}</Text>;
+}
+
+// Shared across Member/Employee/Retailer home screens — shows Admin's recent
+// broadcasts targeted at this user (their district/mandal, or all of Telangana).
+// See backend/lib/broadcasts.js for the delivery-side matching logic.
+export function AnnouncementsCard({ fetchFn }) {
+  const [items, setItems] = useState(null);
+  useEffect(() => { fetchFn().then(setItems).catch(() => setItems([])); }, [fetchFn]);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Text style={{ fontSize: 12, fontWeight: "700", color: T.inkSoft, marginBottom: 6 }}>Announcements</Text>
+      {items.slice(0, 3).map((b) => (
+        <View key={b.broadcast_id} style={{ backgroundColor: T.goldLight, borderWidth: 1, borderColor: T.goldLight, borderRadius: 10, padding: 10, marginBottom: 6 }}>
+          <Text style={{ fontSize: 12, color: "#6b530d" }}>{b.message}</Text>
+          <Text style={{ fontSize: 10, color: T.inkSoft, marginTop: 3 }}>{new Date(b.created_at).toLocaleDateString()}</Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 // Shared "Change Password" section — used in every role's Profile screen so

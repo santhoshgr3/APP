@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Home, ClipboardList, ShoppingBag, Wallet, Store, Plus, ThumbsUp, ThumbsDown, CheckCircle2, Clock, LogOut, Camera, Banknote } from "lucide-react";
 import { api, photoUrl } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, AnnouncementsCard, T } from "./ui";
 import LocationCascade from "./LocationCascade";
 import BankTransferQR from "./BankTransferQR";
 
@@ -132,6 +132,7 @@ function HomeTab({ push, refreshKey }) {
 
   return (
     <Screen>
+      <AnnouncementsCard fetchFn={api.retailerBroadcasts} />
       <Card style={{ marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
         <div><div style={{ fontSize: 10, color: T.inkSoft, fontWeight: 700 }}>CASH COLLECTED (COD)</div><div style={{ fontSize: 19, fontWeight: 800 }}>₹{earnings.gross}</div></div>
         <div style={{ textAlign: "right" }}><div style={{ fontSize: 10, color: T.inkSoft, fontWeight: 700 }}>OWED TO GVCDA</div><div style={{ fontSize: 13, fontWeight: 700, color: T.terracotta }}>₹{earnings.commission_owed}</div></div>

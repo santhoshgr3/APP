@@ -104,6 +104,28 @@ export function LoadingScreen({ text = "Loading..." }) {
   return <Screen><div style={{ textAlign: "center", padding: 60, color: T.inkSoft, fontSize: 13 }}>{text}</div></Screen>;
 }
 
+// Shared across Member/Employee/Retailer home screens — shows Admin's recent
+// broadcasts targeted at this user (their district/mandal, or all of Telangana).
+// See backend/lib/broadcasts.js for the delivery-side matching logic.
+export function AnnouncementsCard({ fetchFn }) {
+  const [items, setItems] = React.useState(null);
+  React.useEffect(() => { fetchFn().then(setItems).catch(() => setItems([])); }, [fetchFn]);
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.inkSoft, marginBottom: 6 }}>Announcements</div>
+      {items.slice(0, 3).map((b) => (
+        <div key={b.broadcast_id} style={{ background: T.goldLight, border: `1px solid ${T.goldLight}`, borderRadius: 10, padding: "9px 12px", marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: "#6b530d" }}>{b.message}</div>
+          <div style={{ fontSize: 10, color: T.inkSoft, marginTop: 3 }}>{new Date(b.created_at).toLocaleDateString()}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ErrorBanner({ message }) {
   if (!message) return null;
   return <div style={{ background: T.redLight, color: T.red, padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 12 }}>{message}</div>;

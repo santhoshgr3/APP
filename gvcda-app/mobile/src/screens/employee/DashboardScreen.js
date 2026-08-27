@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { View, Text } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { Screen, Card, Btn, LoadingScreen } from "../../components/ui";
+import { Screen, Card, Btn, LoadingScreen, AnnouncementsCard } from "../../components/ui";
 import { api } from "../../api";
 import { T } from "../../theme";
 
@@ -15,7 +15,10 @@ export default function DashboardScreen({ navigation }) {
     <Screen>
       <Text style={{ fontSize: 12, color: T.inkSoft, marginBottom: 16 }}>
         {(data.employee.designation || "").replaceAll("_", " ") || "Field employee"}
+        {data.employee.mandal_name || data.employee.district_name ? ` • ${data.employee.mandal_name || data.employee.district_name}` : ""}
       </Text>
+
+      <AnnouncementsCard fetchFn={api.employeeBroadcasts} />
 
       <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
         <Card style={{ flex: 1 }}>

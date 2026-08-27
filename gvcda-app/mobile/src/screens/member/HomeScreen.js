@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, TouchableOpacity, FlatList, RefreshControl } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { Screen, Card, LoadingScreen, EmptyState } from "../../components/ui";
+import { Screen, Card, LoadingScreen, EmptyState, AnnouncementsCard } from "../../components/ui";
 import RetailerThumb from "../../components/RetailerThumb";
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
@@ -42,6 +42,8 @@ export default function HomeScreen({ navigation }) {
             <Text style={{ fontSize: 18, fontWeight: "800", color: T.tealDark, marginBottom: 14 }}>
               Namaste, {(data.user.full_name || "Member").split(" ")[0]}
             </Text>
+
+            <AnnouncementsCard fetchFn={api.memberBroadcasts} />
 
             <TouchableOpacity onPress={() => navigation.navigate("DigitalCard")} style={{ marginBottom: 18 }}>
               {membership ? (

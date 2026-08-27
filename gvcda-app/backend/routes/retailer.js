@@ -4,8 +4,14 @@ const { get, all, run } = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
 const { uploadPhotos, uploadSingleImage, saveFiles, deleteFile } = require("../lib/uploads");
+const broadcasts = require("../lib/broadcasts");
 
 router.use(requireAuth);
+
+// GET /retailer/broadcasts — announcements targeted at this retailer's district/mandal, or all of Telangana
+router.get("/broadcasts", async (req, res, next) => {
+  try { res.json(await broadcasts.getVisibleBroadcasts(req.auth.user_id)); } catch (e) { next(e); }
+});
 
 // POST /retailer/register { business_name, category_id, village_id, phone }
 // Self-registration path. Sets the caller's role to 'retailer' and creates a pending listing.

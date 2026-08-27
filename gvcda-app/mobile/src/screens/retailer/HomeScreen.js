@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { View, Text } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { Screen, Card, Chip, LoadingScreen, EmptyState } from "../../components/ui";
+import { Screen, Card, Chip, LoadingScreen, EmptyState, AnnouncementsCard } from "../../components/ui";
 import { api } from "../../api";
 import { T } from "../../theme";
 
@@ -21,6 +21,7 @@ export default function RetailerHomeScreen({ navigation }) {
 
   return (
     <Screen>
+      <AnnouncementsCard fetchFn={api.retailerBroadcasts} />
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <Text style={{ fontSize: 16, fontWeight: "800" }}>{retailer.business_name}</Text>
         <Chip tone="teal">{retailer.status}</Chip>

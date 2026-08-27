@@ -3,8 +3,14 @@ const router = express.Router();
 const { get, all, run } = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
+const broadcasts = require("../lib/broadcasts");
 
 router.use(requireAuth); // every route below requires a logged-in user
+
+// GET /member/broadcasts — announcements targeted at this member's district/mandal, or all of Telangana
+router.get("/broadcasts", async (req, res, next) => {
+  try { res.json(await broadcasts.getVisibleBroadcasts(req.auth.user_id)); } catch (e) { next(e); }
+});
 
 // PATCH /member/profile { full_name, village_id, age, gender, address }
 router.patch("/profile", async (req, res, next) => {

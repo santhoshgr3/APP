@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Home, Users, Wallet, MapPinned, UserPlus, Plus, CheckCircle2, LogOut, Camera, TrendingUp } from "lucide-react";
 import { api } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, AnnouncementsCard, T } from "./ui";
 import LocationCascade from "./LocationCascade";
 
 export default function EmployeeApp({ user, onLogout }) {
   const [tab, setTab] = useState("dashboard");
   const [stack, setStack] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [territory, setTerritory] = useState(null);
   const push = (screen, params) => setStack((s) => [...s, { screen, params }]);
   const pop = () => setStack((s) => s.slice(0, -1));
   const changeTab = (id) => { setTab(id); setStack([]); };
@@ -18,7 +19,7 @@ export default function EmployeeApp({ user, onLogout }) {
   if (top?.screen === "listRetailer") return <ListRetailerForm onBack={() => { pop(); refresh(); setTab("book"); }} />;
 
   const tabs = [
-    { id: "dashboard", label: "Dashboard", icon: Home, Comp: () => <DashboardTab push={push} refreshKey={refreshKey} /> },
+    { id: "dashboard", label: "Dashboard", icon: Home, Comp: () => <DashboardTab push={push} refreshKey={refreshKey} onTerritory={setTerritory} /> },
     { id: "book", label: "My Book", icon: Users, Comp: () => <BookTab push={push} refreshKey={refreshKey} /> },
     { id: "incentives", label: "Incentives", icon: TrendingUp, Comp: () => <IncentivesTab refreshKey={refreshKey} /> },
     { id: "visits", label: "Visits", icon: MapPinned, Comp: () => <VisitLogTab refreshKey={refreshKey} onAction={refresh} /> },
@@ -28,20 +29,24 @@ export default function EmployeeApp({ user, onLogout }) {
 
   return (
     <>
-      <TopBar title={user.full_name} subtitle={`${(user.designation || "").replaceAll("_", " ")} • Amberpet`} />
+      <TopBar title={user.full_name} subtitle={`${(user.designation || "").replaceAll("_", " ")}${territory ? " • " + territory : ""}`} />
       <Active />
       <BottomTabs tabs={tabs} active={tab} onChange={changeTab} />
     </>
   );
 }
 
-function DashboardTab({ push, refreshKey }) {
+function DashboardTab({ push, refreshKey, onTerritory }) {
   const [data, setData] = useState(null);
-  useEffect(() => { api.employeeDashboard().then(setData); }, [refreshKey]);
+  useEffect(() => { api.employeeDashboard().then((d) => {
+    setData(d);
+    onTerritory?.(d.employee.mandal_name || d.employee.district_name || "");
+  }); }, [refreshKey]);
   if (!data) return <LoadingScreen />;
 
   return (
     <Screen>
+      <AnnouncementsCard fetchFn={api.employeeBroadcasts} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
         <Card>
           <div style={{ fontSize: 10, color: T.inkSoft, fontWeight: 700 }}>MEMBERSHIPS SOLD</div>

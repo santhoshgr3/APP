@@ -2,10 +2,16 @@ const express = require("express");
 const router = express.Router();
 const { get, all, run } = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
+const broadcasts = require("../lib/broadcasts");
 
 const PHONE_RE = /^\d{10}$/;
 
 router.use(requireAuth, requireRole("employee"));
+
+// GET /employee/broadcasts — announcements targeted at this employee's territory, or all of Telangana
+router.get("/broadcasts", async (req, res, next) => {
+  try { res.json(await broadcasts.getVisibleBroadcasts(req.auth.user_id)); } catch (e) { next(e); }
+});
 
 // GET /employee/dashboard
 router.get("/dashboard", async (req, res, next) => {
@@ -14,13 +20,20 @@ router.get("/dashboard", async (req, res, next) => {
     const membershipsSold = (await get("SELECT COUNT(*) c FROM memberships WHERE sold_by_employee_id = ?", [empId])).c;
     const retailersListed = (await get("SELECT COUNT(*) c FROM retailers WHERE onboarding_employee_id = ?", [empId])).c;
     const retailersPending = (await get("SELECT COUNT(*) c FROM retailers WHERE onboarding_employee_id = ? AND status = 'pending'", [empId])).c;
-    const employee = await get("SELECT * FROM users WHERE user_id = ?", [empId]);
+    const employee = await get(
+      `SELECT u.*, d.name as district_name, m.name as mandal_name
+       FROM users u
+       LEFT JOIN districts d ON d.district_id = u.territory_district_id
+       LEFT JOIN mandals m ON m.mandal_id = u.territory_mandal_id
+       WHERE u.user_id = ?`,
+      [empId]
+    );
     res.json({
       employee,
       memberships_sold: Number(membershipsSold),
       retailers_listed: Number(retailersListed),
       retailers_pending: Number(retailersPending),
-      monthly_target: 50, // static demo target; real build stores this per-employee
+      monthly_target: employee.monthly_target,
     });
   } catch (e) { next(e); }
 });

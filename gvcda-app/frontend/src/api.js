@@ -62,6 +62,7 @@ export const api = {
   // member
   memberProfile: (payload) => request("/member/profile", { method: "PATCH", body: payload }),
   memberHome: () => request("/member/home"),
+  memberBroadcasts: () => request("/member/broadcasts"),
   memberMembership: () => request("/member/membership"),
   membershipCheckout: (plan_id) => request("/member/membership/checkout", { method: "POST", body: { plan_id } }),
   submitMembershipUtr: (request_id, utr) => request("/member/membership/submit-utr", { method: "POST", body: { request_id, utr } }),
@@ -81,6 +82,7 @@ export const api = {
 
   // employee
   employeeDashboard: () => request("/employee/dashboard"),
+  employeeBroadcasts: () => request("/employee/broadcasts"),
   enrolMember: (payload) => request("/employee/enrol-member", { method: "POST", body: payload }),
   listRetailer: (payload) => request("/employee/list-retailer", { method: "POST", body: payload }),
   employeeMembers: () => request("/employee/members"),
@@ -92,6 +94,7 @@ export const api = {
   // retailer
   retailerRegister: (payload) => request("/retailer/register", { method: "POST", body: payload }),
   retailerMe: () => request("/retailer/me"),
+  retailerBroadcasts: () => request("/retailer/broadcasts"),
   retailerProducts: () => request("/retailer/products"),
   addProduct: (name, price) => request("/retailer/products", { method: "POST", body: { name, price } }),
   updateProduct: (id, payload) => request(`/retailer/products/${id}`, { method: "PATCH", body: payload }),

@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api, clearSession, saveSession, getSession, photoUrl } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ErrorBanner, ChangePasswordCard, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ErrorBanner, ChangePasswordCard, AnnouncementsCard, T } from "./ui";
 import BankTransferQR from "./BankTransferQR";
 import LocationCascade from "./LocationCascade";
 
@@ -144,6 +144,8 @@ function HomeTab({ push, user }) {
         <MapPin size={13} color={T.terracotta} />
         <span style={{ fontSize: 12, fontWeight: 700 }}>{data.user.village_id ? `${data.user.village_name}, ${data.user.mandal_name}` : "No location set"}</span>
       </div>
+
+      <AnnouncementsCard fetchFn={api.memberBroadcasts} />
 
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Explore Sectors</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 18 }}>
