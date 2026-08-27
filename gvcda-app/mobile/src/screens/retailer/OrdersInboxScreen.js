@@ -36,9 +36,10 @@ export default function OrdersInboxScreen({ navigation }) {
           orders.map((o) => (
             <Card key={o.order_id} style={{ marginBottom: 8 }}>
               <TouchableOpacity onPress={() => navigation.navigate("OrderDetail", { id: o.order_id })} style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <View>
+                <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={{ fontSize: 12.5, fontWeight: "700" }}>#{o.order_id} • {o.member_name}</Text>
                   <Text style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>₹{o.order_total} • {new Date(o.placed_at).toLocaleDateString()}</Text>
+                  {o.delivery_address ? <Text style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 2 }} numberOfLines={1}>📍 {o.delivery_address}</Text> : null}
                 </View>
                 <Chip>{o.status}</Chip>
               </TouchableOpacity>

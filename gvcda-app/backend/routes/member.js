@@ -151,10 +151,11 @@ router.get("/retailers/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /member/orders { retailer_id, items: [{product_id, quantity}] }
+// POST /member/orders { retailer_id, items: [{product_id, quantity}], delivery_address, delivery_phone? }
 router.post("/orders", async (req, res, next) => {
   try {
-    const { retailer_id, items } = req.body;
+    const { retailer_id, items, delivery_address, delivery_phone } = req.body;
+    if (!delivery_address || !delivery_address.trim()) return res.status(400).json({ error: "Delivery address is required" });
     const retailer = await get("SELECT * FROM retailers WHERE retailer_id = ? AND status = 'approved'", [retailer_id]);
     if (!retailer) return res.status(404).json({ error: "Retailer not found or not approved" });
     if (!items || !items.length) return res.status(400).json({ error: "Order must have at least one item" });
@@ -176,10 +177,18 @@ router.post("/orders", async (req, res, next) => {
     const commissionAmt = Math.round(total * commissionPct / 100);
     const payoutAmt = total - commissionAmt;
 
+    // Default the delivery contact number to the member's own account phone
+    // if they didn't give a different one (e.g. ordering on someone else's behalf).
+    let phone = delivery_phone;
+    if (!phone) {
+      const member = await get("SELECT phone FROM users WHERE user_id = ?", [req.auth.user_id]);
+      phone = member.phone;
+    }
+
     const orderResult = await run(
-      `INSERT INTO orders (member_id, retailer_id, order_total, commission_pct, commission_amt, payout_amt)
-       VALUES (?, ?, ?, ?, ?, ?) RETURNING order_id`,
-      [req.auth.user_id, retailer_id, total, commissionPct, commissionAmt, payoutAmt]
+      `INSERT INTO orders (member_id, retailer_id, order_total, commission_pct, commission_amt, payout_amt, delivery_address, delivery_phone)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING order_id`,
+      [req.auth.user_id, retailer_id, total, commissionPct, commissionAmt, payoutAmt, delivery_address.trim(), phone]
     );
 
     for (const li of lineItems) {

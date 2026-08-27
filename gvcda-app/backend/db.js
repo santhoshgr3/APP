@@ -225,9 +225,16 @@ CREATE TABLE IF NOT EXISTS orders (
   payout_amt REAL NOT NULL,         -- what the retailer keeps: order_total - commission_amt
   commission_settled INTEGER NOT NULL DEFAULT 0,
   settlement_request_id INTEGER REFERENCES payment_requests(request_id),
+  delivery_address TEXT NOT NULL DEFAULT '',  -- where the retailer delivers this COD order — a
+  delivery_phone TEXT,                        -- member's saved address is a default, not a
+                                               -- reliable delivery address, so this is collected
+                                               -- per-order at checkout instead.
   placed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   fulfilled_at TEXT
 );
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_phone TEXT;
 
 CREATE TABLE IF NOT EXISTS order_items (
   order_item_id SERIAL PRIMARY KEY,

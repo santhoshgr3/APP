@@ -144,6 +144,7 @@ function HomeTab({ push, refreshKey }) {
       {orders.map((o) => (
         <Card key={o.order_id} onClick={() => push("orderDetail", { id: o.order_id })} style={{ marginBottom: 8, cursor: "pointer" }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 12.5, fontWeight: 700 }}>#{o.order_id} • {o.member_name}</span><span style={{ fontSize: 12.5, fontWeight: 700, color: T.teal }}>₹{o.order_total}</span></div>
+          {o.delivery_address && <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3 }}>📍 {o.delivery_address}</div>}
         </Card>
       ))}
     </Screen>
@@ -166,6 +167,7 @@ function OrdersTab({ push, refreshKey }) {
         orders.map((o) => (
           <Card key={o.order_id} onClick={() => push("orderDetail", { id: o.order_id })} style={{ marginBottom: 8, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 12.5, fontWeight: 700 }}>#{o.order_id} • {o.member_name}</span><span style={{ fontSize: 12.5, fontWeight: 700, color: T.teal }}>₹{o.order_total}</span></div>
+          {o.delivery_address && <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3 }}>📍 {o.delivery_address}</div>}
           </Card>
         ))}
     </Screen>
@@ -184,6 +186,11 @@ function OrderDetail({ id, onBack }) {
     <>
       <TopBar title={`Order #${order.order_id}`} onBack={onBack} />
       <Screen>
+        <Card style={{ marginBottom: 10, background: T.tealLight, borderColor: T.tealLight }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.teal, marginBottom: 4 }}>DELIVER TO</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{order.delivery_address || "No address provided"}</div>
+          {order.delivery_phone && <div style={{ fontSize: 12, color: T.inkSoft, marginTop: 4 }}>📞 {order.delivery_phone}</div>}
+        </Card>
         <Card style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Items</div>
           {items.map((it) => (

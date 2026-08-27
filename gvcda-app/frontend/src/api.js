@@ -72,7 +72,8 @@ export const api = {
     return request(`/member/retailers${qs ? "?" + qs : ""}`);
   },
   memberRetailerDetail: (id) => request(`/member/retailers/${id}`),
-  placeOrder: (retailer_id, items) => request("/member/orders", { method: "POST", body: { retailer_id, items } }),
+  placeOrder: (retailer_id, items, delivery_address, delivery_phone) =>
+    request("/member/orders", { method: "POST", body: { retailer_id, items, delivery_address, delivery_phone } }),
   memberOrders: () => request("/member/orders"),
   memberJobs: () => request("/member/jobs"),
   applyJob: (id) => request(`/member/jobs/${id}/apply`, { method: "POST" }),

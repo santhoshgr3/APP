@@ -35,6 +35,12 @@ export default function OrderDetailScreen({ navigation, route }) {
           <Text style={{ fontSize: 11, color: T.inkSoft }}>{new Date(order.placed_at).toLocaleString()}</Text>
         </View>
 
+        <Card style={{ marginBottom: 14, backgroundColor: T.tealLight, borderColor: T.tealLight }}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: T.teal, marginBottom: 4 }}>DELIVER TO</Text>
+          <Text style={{ fontSize: 13, fontWeight: "700" }}>{order.delivery_address || "No address provided"}</Text>
+          {order.delivery_phone ? <Text style={{ fontSize: 12, color: T.inkSoft, marginTop: 4 }}>📞 {order.delivery_phone}</Text> : null}
+        </Card>
+
         <Text style={{ fontSize: 12, fontWeight: "700", marginBottom: 8 }}>Items</Text>
         {items.map((i) => (
           <Card key={i.order_item_id} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between" }}>

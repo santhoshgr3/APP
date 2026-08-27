@@ -1,22 +1,30 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { TopBar, Screen, Card, Btn, ErrorBanner, EmptyState } from "../../components/ui";
+import { TopBar, Screen, Card, Btn, Field, Input, ErrorBanner, EmptyState } from "../../components/ui";
 import { api } from "../../api";
 import { useCart } from "../../context/CartContext";
+import { useAuth } from "../../context/AuthContext";
 import { T } from "../../theme";
 
 // Screen Spec 1.9 — completes the transaction: qty steppers, total, place order.
+// Cash on Delivery still needs a real delivery address — pre-fill from the
+// member's saved profile address if they have one, but let them override it
+// per order (a saved home address isn't always where this order should go).
 export default function CartScreen({ navigation }) {
+  const { session } = useAuth();
   const { cart, updateQty, total, clearCart } = useCart();
+  const [address, setAddress] = useState(session?.user?.address || "");
+  const [phone, setPhone] = useState(session?.user?.phone || "");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
 
   const place = async () => {
+    if (!address.trim()) { setError("Delivery address is required"); return; }
     setPlacing(true); setError("");
     try {
       const retailerId = cart[0].retailer_id;
-      await api.placeOrder(retailerId, cart.map((i) => ({ product_id: i.product_id, quantity: i.qty })));
+      await api.placeOrder(retailerId, cart.map((i) => ({ product_id: i.product_id, quantity: i.qty })), address.trim(), phone.trim() || undefined);
       clearCart();
       navigation.navigate("Main");
     } catch (e) { setError(e.message); }
@@ -48,16 +56,22 @@ export default function CartScreen({ navigation }) {
               <Text style={{ fontSize: 13, fontWeight: "700" }}>Total</Text>
               <Text style={{ fontSize: 14, fontWeight: "800", color: T.teal }}>₹{total}</Text>
             </Card>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, marginBottom: 4 }}>
               <Feather name="truck" size={13} color={T.teal} />
               <Text style={{ fontSize: 11.5, color: T.inkSoft }}>Cash on Delivery — pay the retailer directly when your order arrives.</Text>
             </View>
+            <Field label="Delivery address *">
+              <Input value={address} onChangeText={setAddress} placeholder="House no, street, landmark" multiline />
+            </Field>
+            <Field label="Contact phone for delivery">
+              <Input value={phone} onChangeText={setPhone} keyboardType="number-pad" maxLength={10} />
+            </Field>
           </>
         )}
       </Screen>
       {cart.length > 0 && (
         <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: T.line, backgroundColor: "#fff" }}>
-          <Btn full onPress={place} disabled={placing}>{placing ? "Placing..." : "Place Order (Cash on Delivery)"}</Btn>
+          <Btn full onPress={place} disabled={placing || !address.trim()}>{placing ? "Placing..." : "Place Order (Cash on Delivery)"}</Btn>
         </View>
       )}
     </View>

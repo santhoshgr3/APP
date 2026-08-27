@@ -107,7 +107,7 @@ export default function MemberApp({ user, roles = [], onLogout, onRoleChanged })
       onViewCart={() => push("cart")} cartTotal={cartTotal} />
   );
   if (top?.screen === "cart") return (
-    <CartScreen cart={cart} setCart={setCart} total={cartTotal}
+    <CartScreen cart={cart} setCart={setCart} total={cartTotal} user={user}
       onBack={pop}
       onPlaced={() => { setCart([]); setStack([]); setTab("orders"); }} />
   );
@@ -237,15 +237,18 @@ function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
   );
 }
 
-function CartScreen({ cart, setCart, total, onBack, onPlaced }) {
+function CartScreen({ cart, setCart, total, user, onBack, onPlaced }) {
+  const [address, setAddress] = useState(user?.address || "");
+  const [phone, setPhone] = useState(user?.phone || "");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
 
   const place = async () => {
+    if (!address.trim()) { setError("Delivery address is required"); return; }
     setPlacing(true); setError("");
     try {
       const retailerId = cart[0].retailer_id;
-      await api.placeOrder(retailerId, cart.map((i) => ({ product_id: i.product_id, quantity: i.qty })));
+      await api.placeOrder(retailerId, cart.map((i) => ({ product_id: i.product_id, quantity: i.qty })), address.trim(), phone.trim() || undefined);
       onPlaced();
     } catch (e) { setError(e.message); }
     setPlacing(false);
@@ -269,12 +272,18 @@ function CartScreen({ cart, setCart, total, onBack, onPlaced }) {
         <Card style={{ marginTop: 10, display: "flex", justifyContent: "space-between" }}>
           <span style={{ fontSize: 13, fontWeight: 700 }}>Total</span><span style={{ fontSize: 14, fontWeight: 800, color: T.teal }}>₹{total}</span>
         </Card>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 11.5, color: T.inkSoft }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, marginBottom: 8, fontSize: 11.5, color: T.inkSoft }}>
           <Truck size={13} color={T.teal} /> Cash on Delivery — pay the retailer directly when your order arrives.
         </div>
+        <Field label="Delivery address *">
+          <input style={inputStyle} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="House no, street, landmark" />
+        </Field>
+        <Field label="Contact phone for delivery">
+          <input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+        </Field>
       </Screen>
       <div style={{ padding: 14, borderTop: `1px solid ${T.line}` }}>
-        <Btn full onClick={place} disabled={placing}>{placing ? "Placing..." : "Place Order (Cash on Delivery)"}</Btn>
+        <Btn full onClick={place} disabled={placing || !address.trim()}>{placing ? "Placing..." : "Place Order (Cash on Delivery)"}</Btn>
       </div>
     </>
   );
