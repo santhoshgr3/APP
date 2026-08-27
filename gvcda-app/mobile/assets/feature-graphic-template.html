@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1024px; height: 500px; overflow: hidden; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #093F3E 0%, #0E5E5C 55%, #0E5E5C 100%);
+    position: relative;
+  }
+  .pattern {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle at 85% 20%, rgba(212,160,23,0.18) 0%, transparent 45%),
+                       radial-gradient(circle at 10% 90%, rgba(193,101,47,0.20) 0%, transparent 40%);
+  }
+  .content {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 64px;
+    gap: 48px;
+  }
+  .textblock { flex: 1; }
+  .brand {
+    font-size: 64px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 1px;
+    line-height: 1;
+  }
+  .tagline {
+    font-size: 26px;
+    font-weight: 600;
+    color: #D4A017;
+    margin-top: 14px;
+  }
+  .sub {
+    font-size: 17px;
+    color: rgba(255,255,255,0.85);
+    margin-top: 16px;
+    max-width: 560px;
+    line-height: 1.5;
+  }
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .card {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 14px;
+    padding: 14px 22px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    text-align: center;
+    min-width: 190px;
+    backdrop-filter: blur(4px);
+  }
+  .card.member { background: rgba(212,160,23,0.22); border-color: rgba(212,160,23,0.5); }
+  .card.retailer { background: rgba(193,101,47,0.22); border-color: rgba(193,101,47,0.5); }
+</style>
+</head>
+<body>
+  <div class="pattern"></div>
+  <div class="content">
+    <div class="textblock">
+      <div class="brand">GVCDA</div>
+      <div class="tagline">One Platform for Village &amp; City Development</div>
+      <div class="sub">Membership &middot; Local Retailer Discounts &middot; Jobs &middot; Community Services</div>
+    </div>
+    <div class="cards">
+      <div class="card member">👤 Member</div>
+      <div class="card retailer">🏪 Retailer</div>
+      <div class="card">💼 Employee</div>
+    </div>
+  </div>
+</body>
+</html>
