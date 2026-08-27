@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text } from "react-native";
-import { Screen, Card, Btn } from "../../components/ui";
+import { Screen, Card, Btn, ChangePasswordCard } from "../../components/ui";
 import { useAuth } from "../../context/AuthContext";
 import RoleSwitcherCard from "../../components/RoleSwitcherCard";
 import { T } from "../../theme";
@@ -24,6 +24,7 @@ export default function MoreScreen() {
         </View>
       </Card>
       <RoleSwitcherCard />
+      <ChangePasswordCard style={{ marginBottom: 8 }} />
       <Btn full variant="danger" icon="log-out" onPress={logout}>Log out</Btn>
     </Screen>
   );

@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { ChevronLeft } from "lucide-react";
+import { api } from "./api";
 
 export const T = {
   teal: "#0E5E5C", tealDark: "#093F3E", tealLight: "#EAF3F2",
@@ -106,4 +107,51 @@ export function LoadingScreen({ text = "Loading..." }) {
 export function ErrorBanner({ message }) {
   if (!message) return null;
   return <div style={{ background: T.redLight, color: T.red, padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 12 }}>{message}</div>;
+}
+
+// Shared "Change Password" section — used in every role's Profile/Account
+// screen so there's one place that calls POST /auth/change-password.
+export function ChangePasswordCard({ style }) {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => { setCurrent(""); setNext(""); setConfirm(""); setError(""); setSuccess(false); };
+
+  const submit = async () => {
+    setError(""); setSuccess(false);
+    if (next.length < 6) return setError("New password must be at least 6 characters");
+    if (next !== confirm) return setError("New passwords don't match");
+    setSaving(true);
+    try {
+      await api.changePassword(current, next);
+      setSuccess(true);
+      setCurrent(""); setNext(""); setConfirm("");
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  if (!open) {
+    return (
+      <Btn full variant="ghost" onClick={() => setOpen(true)} style={style}>Change Password</Btn>
+    );
+  }
+
+  return (
+    <Card style={{ marginBottom: 8, ...style }}>
+      <ErrorBanner message={error} />
+      {success && <div style={{ background: T.tealLight, color: T.teal, padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 12 }}>Password updated.</div>}
+      <Field label="Current password"><input style={inputStyle} type="password" value={current} onChange={(e) => setCurrent(e.target.value)} /></Field>
+      <Field label="New password"><input style={inputStyle} type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="At least 6 characters" /></Field>
+      <Field label="Confirm new password"><input style={inputStyle} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={submit} disabled={saving || !current || !next || !confirm}>{saving ? "Saving..." : "Save"}</Btn>
+        <Btn variant="ghost" onClick={() => { setOpen(false); reset(); }}>Cancel</Btn>
+      </div>
+    </Card>
+  );
 }

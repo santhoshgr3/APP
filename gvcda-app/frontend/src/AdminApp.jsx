@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import {
   Home, Store, Users, MapPinned, TrendingUp, AlertCircle, LogOut, IndianRupee,
-  Megaphone, UserCog, ChevronRight, Plus, Banknote, ExternalLink,
+  Megaphone, UserCog, ChevronRight, Plus, Banknote, ExternalLink, Settings,
 } from "lucide-react";
 import { api, photoUrl } from "./api";
-import { Card, Btn, Chip, EmptyState, LoadingScreen, ErrorBanner, Field, inputStyle, T } from "./ui";
+import { Card, Btn, Chip, EmptyState, LoadingScreen, ErrorBanner, Field, inputStyle, ChangePasswordCard, T } from "./ui";
 
 // Admin is a separate, full-width web dashboard (not the phone-frame mobile shell) —
 // per the PRD, it's a heavier data-table workflow better suited to a large screen.
@@ -23,6 +23,7 @@ export default function AdminApp({ user, onLogout }) {
     { id: "complaints", label: "Complaint Desk", icon: AlertCircle },
     { id: "broadcast", label: "Broadcast Tool", icon: Megaphone },
     { id: "users", label: "User & Role Management", icon: UserCog },
+    { id: "account", label: "Account", icon: Settings },
   ];
 
   const PANES = {
@@ -35,6 +36,7 @@ export default function AdminApp({ user, onLogout }) {
     complaints: <ComplaintsTab refreshKey={refreshKey} onAction={refresh} />,
     broadcast: <BroadcastTab refreshKey={refreshKey} onAction={refresh} />,
     users: <UsersTab refreshKey={refreshKey} onAction={refresh} />,
+    account: <AccountTab user={user} />,
   };
 
   return (
@@ -441,6 +443,16 @@ function BroadcastTab({ refreshKey, onAction }) {
         )}
       />
     </div>
+  );
+}
+
+function AccountTab({ user }) {
+  return (
+    <Card style={{ maxWidth: 420 }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{user.full_name}</div>
+      <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3, marginBottom: 14 }}>{user.phone}</div>
+      <ChangePasswordCard />
+    </Card>
   );
 }
 

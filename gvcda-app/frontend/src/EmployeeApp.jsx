@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Home, Users, Wallet, MapPinned, UserPlus, Plus, CheckCircle2, LogOut, Camera, TrendingUp } from "lucide-react";
 import { api } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, T } from "./ui";
 import LocationCascade from "./LocationCascade";
 
 export default function EmployeeApp({ user, onLogout }) {
@@ -276,6 +276,7 @@ function EmployeeProfile({ user, onLogout }) {
         <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3 }}>{user.phone}</div>
         <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3, textTransform: "capitalize" }}>{(user.designation || "").replaceAll("_", " ")}</div>
       </Card>
+      <ChangePasswordCard style={{ marginBottom: 8 }} />
       <Btn full variant="danger" onClick={onLogout}><LogOut size={13} /> Log out</Btn>
     </Screen>
   );

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text } from "react-native";
-import { Screen, Card, Btn, LoadingScreen } from "../../components/ui";
+import { Screen, Card, Btn, LoadingScreen, ChangePasswordCard } from "../../components/ui";
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import RoleSwitcherCard from "../../components/RoleSwitcherCard";
@@ -58,9 +58,10 @@ export default function ProfileScreen({ navigation }) {
           Register your business (become a Retailer)
         </Btn>
       )}
-      <Btn full variant="ghost" icon="phone" style={{ marginBottom: 16 }} onPress={() => {}}>
+      <Btn full variant="ghost" icon="phone" style={{ marginBottom: 8 }} onPress={() => {}}>
         Helpline: 1800-000-0000
       </Btn>
+      <ChangePasswordCard style={{ marginBottom: 16 }} />
       <Btn full variant="danger" icon="log-out" onPress={logout}>Log out</Btn>
     </Screen>
   );

@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api, clearSession, saveSession, photoUrl } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, T } from "./ui";
 import BankTransferQR from "./BankTransferQR";
 import LocationCascade from "./LocationCascade";
 
@@ -397,6 +397,7 @@ function ProfileTab({ user, roles, push, onLogout }) {
           <ShoppingCart size={13} /> Register your business (become a Retailer)
         </Btn>
       )}
+      <ChangePasswordCard style={{ marginBottom: 8 }} />
       <Btn full variant="danger" onClick={onLogout}><LogOut size={13} /> Log out</Btn>
     </Screen>
   );

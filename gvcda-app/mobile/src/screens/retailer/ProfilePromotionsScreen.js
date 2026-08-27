@@ -3,7 +3,7 @@ import { View, Text, Switch, Image, TouchableOpacity } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
-import { Screen, Card, Btn, Field, Input, ErrorBanner, EmptyState } from "../../components/ui";
+import { Screen, Card, Btn, Field, Input, ErrorBanner, EmptyState, ChangePasswordCard } from "../../components/ui";
 import { api, photoUrl } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import RoleSwitcherCard from "../../components/RoleSwitcherCard";
@@ -153,7 +153,8 @@ export default function ProfilePromotionsScreen() {
       )}
 
       <RoleSwitcherCard />
-      <Btn full variant="danger" icon="log-out" style={{ marginTop: 4 }} onPress={logout}>Log out</Btn>
+      <ChangePasswordCard style={{ marginTop: 4, marginBottom: 8 }} />
+      <Btn full variant="danger" icon="log-out" onPress={logout}>Log out</Btn>
     </Screen>
   );
 }

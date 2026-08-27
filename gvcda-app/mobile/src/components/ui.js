@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { T } from "../theme";
+import { api } from "../api";
 
 export function TopBar({ title, subtitle, onBack, right }) {
   return (
@@ -121,6 +122,53 @@ export function ErrorBanner({ message }) {
 
 export function SectionTitle({ children, style }) {
   return <Text style={[styles.sectionTitle, style]}>{children}</Text>;
+}
+
+// Shared "Change Password" section — used in every role's Profile screen so
+// there's one place that calls POST /auth/change-password.
+export function ChangePasswordCard({ style }) {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setError(""); setSuccess(false);
+    if (next.length < 6) return setError("New password must be at least 6 characters");
+    if (next !== confirm) return setError("New passwords don't match");
+    setSaving(true);
+    try {
+      await api.changePassword(current, next);
+      setSuccess(true);
+      setCurrent(""); setNext(""); setConfirm("");
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  if (!open) {
+    return <Btn full variant="ghost" icon="lock" style={style} onPress={() => setOpen(true)}>Change Password</Btn>;
+  }
+
+  return (
+    <Card style={[{ marginBottom: 8 }, style]}>
+      <ErrorBanner message={error} />
+      {success ? (
+        <View style={{ backgroundColor: T.tealLight, borderRadius: 8, padding: 10, marginBottom: 12 }}>
+          <Text style={{ color: T.teal, fontSize: 12 }}>Password updated.</Text>
+        </View>
+      ) : null}
+      <Field label="Current password"><Input secureTextEntry value={current} onChangeText={setCurrent} /></Field>
+      <Field label="New password"><Input secureTextEntry value={next} onChangeText={setNext} placeholder="At least 6 characters" /></Field>
+      <Field label="Confirm new password"><Input secureTextEntry value={confirm} onChangeText={setConfirm} /></Field>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <Btn onPress={submit} disabled={saving || !current || !next || !confirm} style={{ flex: 1 }}>{saving ? "Saving..." : "Save"}</Btn>
+        <Btn variant="ghost" onPress={() => { setOpen(false); setCurrent(""); setNext(""); setConfirm(""); setError(""); setSuccess(false); }} style={{ flex: 1 }}>Cancel</Btn>
+      </View>
+    </Card>
+  );
 }
 
 const styles = StyleSheet.create({

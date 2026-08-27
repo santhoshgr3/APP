@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Home, ClipboardList, ShoppingBag, Wallet, Store, Plus, ThumbsUp, ThumbsDown, CheckCircle2, Clock, LogOut, Camera, Banknote } from "lucide-react";
 import { api, photoUrl } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, T } from "./ui";
 import LocationCascade from "./LocationCascade";
 import BankTransferQR from "./BankTransferQR";
 
@@ -512,7 +512,8 @@ function RetailerProfile({ retailer: initialRetailer, onLogout }) {
         ))
       )}
 
-      <Btn full variant="danger" onClick={onLogout} style={{ marginTop: 16 }}><LogOut size={13} /> Log out</Btn>
+      <ChangePasswordCard style={{ marginTop: 16, marginBottom: 8 }} />
+      <Btn full variant="danger" onClick={onLogout}><LogOut size={13} /> Log out</Btn>
     </Screen>
   );
 }
