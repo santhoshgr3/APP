@@ -4,10 +4,65 @@ import {
   ShoppingCart, CheckCircle2, Clock, AlertCircle, Settings, LogOut, Send, Truck, Store
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { api, clearSession, saveSession, photoUrl } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, T } from "./ui";
+import { api, clearSession, saveSession, getSession, photoUrl } from "./api";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ErrorBanner, ChangePasswordCard, T } from "./ui";
 import BankTransferQR from "./BankTransferQR";
 import LocationCascade from "./LocationCascade";
+
+// Shown once, right after login, to any brand-new self-signup Member with no
+// village set yet — the web equivalent of mobile's RegistrationScreen.js.
+// Without this, a web member has no way to ever set their location at all
+// (LocationCascade otherwise only appears in the Become-a-Retailer form).
+export function CompleteMemberProfile({ user, onDone }) {
+  const [fullName, setFullName] = useState(user.full_name || "");
+  const [age, setAge] = useState("");
+  const [gender, setGender] = useState("female");
+  const [address, setAddress] = useState("");
+  const [loc, setLoc] = useState({ district_id: null, mandal_id: null, village_id: null });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!fullName.trim()) { setError("Full name is required"); return; }
+    if (!loc.village_id) { setError("Please select District, Mandal and Village/Town"); return; }
+    setError(""); setSaving(true);
+    try {
+      await api.memberProfile({
+        full_name: fullName.trim(),
+        village_id: loc.village_id,
+        age: age ? Number(age) : null,
+        gender,
+        address: address.trim() || null,
+      });
+      const session = getSession();
+      const me = await api.me();
+      saveSession(session.token, me.user, me.roles);
+      onDone();
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <>
+      <TopBar title="Complete your profile" subtitle="A few details before you continue" />
+      <Screen>
+        <ErrorBanner message={error} />
+        <Field label="Full name *"><input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" /></Field>
+        <Field label="Age"><input style={inputStyle} value={age} onChange={(e) => setAge(e.target.value.replace(/\D/g, ""))} placeholder="Optional" /></Field>
+        <Field label="Gender">
+          <select style={inputStyle} value={gender} onChange={(e) => setGender(e.target.value)}>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="unspecified">Prefer not to say</option>
+          </select>
+        </Field>
+        <Field label="Location"><LocationCascade value={loc} onChange={setLoc} /></Field>
+        <Field label="Address (optional)"><input style={inputStyle} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="House no, street, landmark" /></Field>
+        <Btn full onClick={save} disabled={saving} style={{ marginTop: 8 }}>{saving ? "Saving..." : "Save & Continue"}</Btn>
+      </Screen>
+    </>
+  );
+}
 
 function RetailerThumb({ photo, size = 44 }) {
   return (
@@ -26,10 +81,21 @@ export default function MemberApp({ user, roles = [], onLogout, onRoleChanged })
   const changeTab = (id) => { setTab(id); setStack([]); };
   const top = stack[stack.length - 1];
 
+  // An order can only ever belong to one retailer (see CartScreen.place — it sends
+  // the whole cart under cart[0]'s retailer_id), so adding a product from a
+  // different shop than what's already in the cart would silently corrupt the
+  // order instead of erroring clearly. Confirm and start fresh instead.
   const addToCart = (product) =>
-    setCart((c) => c.find((i) => i.product_id === product.product_id)
-      ? c.map((i) => i.product_id === product.product_id ? { ...i, qty: i.qty + 1 } : i)
-      : [...c, { ...product, qty: 1 }]);
+    setCart((c) => {
+      if (c.length > 0 && c[0].retailer_id !== product.retailer_id) {
+        const ok = window.confirm("Your cart has items from a different shop. Adding this will clear your cart and start a new order. Continue?");
+        if (!ok) return c;
+        return [{ ...product, qty: 1 }];
+      }
+      return c.find((i) => i.product_id === product.product_id)
+        ? c.map((i) => i.product_id === product.product_id ? { ...i, qty: i.qty + 1 } : i)
+        : [...c, { ...product, qty: 1 }];
+    });
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
   if (top?.screen === "sector") return (
@@ -253,21 +319,32 @@ function JobsTab({ push }) {
 function JobDetail({ id, onBack }) {
   const [jobs, setJobs] = useState(null);
   const [applied, setApplied] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState("");
   useEffect(() => { api.memberJobs().then(setJobs); }, []);
   if (!jobs) return <><TopBar title="Loading" onBack={onBack} /><LoadingScreen /></>;
   const j = jobs.find((x) => x.job_id === id);
   const isApplied = applied || !!j.applied;
+
+  const apply = async () => {
+    setApplying(true); setError("");
+    try { await api.applyJob(id); setApplied(true); }
+    catch (e) { setError(e.message); }
+    setApplying(false);
+  };
+
   return (
     <>
       <TopBar title={j.title} onBack={onBack} />
       <Screen>
+        <ErrorBanner message={error} />
         <Card>
           <div style={{ fontSize: 11.5, color: T.inkSoft, marginBottom: 6 }}>{j.job_type} • {j.village_name}</div>
           <div style={{ fontSize: 15, fontWeight: 800, color: T.teal }}>{j.pay}</div>
         </Card>
         <div style={{ marginTop: 16 }}>
-          <Btn full disabled={isApplied} onClick={async () => { await api.applyJob(id); setApplied(true); }}>
-            {isApplied ? <><CheckCircle2 size={13} /> Applied</> : "Apply Now"}
+          <Btn full disabled={isApplied || applying} onClick={apply}>
+            {isApplied ? <><CheckCircle2 size={13} /> Applied</> : applying ? "Applying..." : "Apply Now"}
           </Btn>
         </div>
       </Screen>

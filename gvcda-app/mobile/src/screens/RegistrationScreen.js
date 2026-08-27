@@ -24,7 +24,13 @@ export default function RegistrationScreen({ navigation }) {
     if (!loc.village_id) { setError("Please select District, Mandal and Village/Town"); return; }
     setError(""); setSaving(true);
     try {
-      await api.memberProfile({ full_name: fullName.trim(), village_id: loc.village_id });
+      await api.memberProfile({
+        full_name: fullName.trim(),
+        village_id: loc.village_id,
+        age: age ? Number(age) : null,
+        gender,
+        address: address.trim() || null,
+      });
       await refreshUser();
       navigation.replace("PlanSelect");
     } catch (e) { setError(e.message); }

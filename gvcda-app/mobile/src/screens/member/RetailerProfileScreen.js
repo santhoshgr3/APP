@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, ScrollView } from "react-native";
+import { View, Text, Image, ScrollView, Alert } from "react-native";
 import { TopBar, Screen, Card, Btn, LoadingScreen, EmptyState, Chip } from "../../components/ui";
 import { api, photoUrl } from "../../api";
 import { useCart } from "../../context/CartContext";
@@ -9,9 +9,28 @@ import { T } from "../../theme";
 export default function RetailerProfileScreen({ navigation, route }) {
   const { id } = route.params;
   const [data, setData] = useState(null);
-  const { cart, addToCart, total, count } = useCart();
+  const { cart, addToCart, clearCart, total, count } = useCart();
 
   useEffect(() => { api.memberRetailerDetail(id).then(setData); }, [id]);
+
+  // An order can only ever belong to one retailer (CartScreen sends the whole
+  // cart under one retailer_id), so adding a product from a different shop than
+  // what's already in the cart would silently corrupt the order at checkout
+  // instead of failing clearly. Confirm and start fresh instead.
+  const handleAdd = (product) => {
+    if (cart.length > 0 && cart[0].retailer_id !== product.retailer_id) {
+      Alert.alert(
+        "Start a new order?",
+        "Your cart has items from a different shop. Adding this will clear your cart.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Clear & Add", style: "destructive", onPress: () => { clearCart(); addToCart(product); } },
+        ]
+      );
+      return;
+    }
+    addToCart(product);
+  };
 
   if (!data) return (
     <View style={{ flex: 1, backgroundColor: T.cream }}>
@@ -61,7 +80,7 @@ export default function RetailerProfileScreen({ navigation, route }) {
                 <Text style={{ fontSize: 11.5, color: T.terracotta, fontWeight: "700" }}>₹{p.price}</Text>
               </View>
             </View>
-            <Btn variant="secondary" icon="plus" onPress={() => addToCart({ ...p, retailer_id: retailer.retailer_id })}>Add</Btn>
+            <Btn variant="secondary" icon="plus" onPress={() => handleAdd({ ...p, retailer_id: retailer.retailer_id })}>Add</Btn>
           </Card>
         ))}
       </Screen>

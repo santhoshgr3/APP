@@ -6,12 +6,16 @@ const paymentRequests = require("../lib/paymentRequests");
 
 router.use(requireAuth); // every route below requires a logged-in user
 
-// PATCH /member/profile { full_name, village_id }
+// PATCH /member/profile { full_name, village_id, age, gender, address }
 router.patch("/profile", async (req, res, next) => {
   try {
-    const { full_name, village_id } = req.body;
-    await run("UPDATE users SET full_name = COALESCE(?, full_name), village_id = COALESCE(?, village_id) WHERE user_id = ?",
-      [full_name, village_id, req.auth.user_id]);
+    const { full_name, village_id, age, gender, address } = req.body;
+    await run(
+      `UPDATE users SET full_name = COALESCE(?, full_name), village_id = COALESCE(?, village_id),
+       age = COALESCE(?, age), gender = COALESCE(?, gender), address = COALESCE(?, address)
+       WHERE user_id = ?`,
+      [full_name, village_id, age || null, gender || null, address || null, req.auth.user_id]
+    );
     const user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
     res.json({ user });
   } catch (e) { next(e); }

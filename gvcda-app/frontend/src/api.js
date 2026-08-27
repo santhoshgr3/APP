@@ -60,6 +60,7 @@ export const api = {
   plans: () => request("/locations/plans", { auth: false }),
 
   // member
+  memberProfile: (payload) => request("/member/profile", { method: "PATCH", body: payload }),
   memberHome: () => request("/member/home"),
   memberMembership: () => request("/member/membership"),
   membershipCheckout: (plan_id) => request("/member/membership/checkout", { method: "POST", body: { plan_id } }),

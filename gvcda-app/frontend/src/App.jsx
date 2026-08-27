@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Repeat, X } from "lucide-react";
 import Login from "./Login";
-import MemberApp from "./MemberApp";
+import MemberApp, { CompleteMemberProfile } from "./MemberApp";
 import EmployeeApp from "./EmployeeApp";
 import RetailerApp from "./RetailerApp";
 import AdminApp from "./AdminApp";
@@ -89,6 +89,11 @@ export default function App() {
       <PhoneFrame>
         {!session ? (
           <Login onLoggedIn={() => setSession(getSession())} />
+        ) : session.user.role === "member" && !session.user.village_id ? (
+          // Brand-new self-signup Member — no village set yet, so most of the
+          // app (retailer browsing, jobs near you, ...) has nothing to scope
+          // to. Capture it once before dropping them into the normal app.
+          <CompleteMemberProfile user={session.user} onDone={refreshSession} />
         ) : (
           <>
             <RoleSwitcher roles={session.roles || [session.user.role]} activeRole={session.user.role} onSwitched={refreshSession} />

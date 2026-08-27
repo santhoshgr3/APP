@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL DEFAULT '',
   full_name TEXT,
+  age INTEGER,
+  gender TEXT,
+  address TEXT,
   role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','employee','retailer','admin')),
   village_id INTEGER REFERENCES villages(village_id),
   designation TEXT,               -- for employees: district_manager/mandal_sub_manager/zonal_manager/volunteer
@@ -86,9 +89,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Safety net for databases seeded before password auth existed (fresh installs
--- already get the column from CREATE TABLE above; this is a no-op there).
+-- Safety net for databases seeded before these columns existed (fresh installs
+-- already get them from CREATE TABLE above; this is a no-op there).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
 
 -- A user's phone/OTP session is one login, but the account can hold more than one
 -- role at once (e.g. Member + Retailer). users.role is the "default/active" role
