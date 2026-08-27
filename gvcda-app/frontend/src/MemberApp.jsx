@@ -76,7 +76,7 @@ function HomeTab({ push, user }) {
     <Screen>
       <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 14 }}>
         <MapPin size={13} color={T.terracotta} />
-        <span style={{ fontSize: 12, fontWeight: 700 }}>{data.user.village_id ? "Amberpet Town, Amberpet" : "No location set"}</span>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>{data.user.village_id ? `${data.user.village_name}, ${data.user.mandal_name}` : "No location set"}</span>
       </div>
 
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Explore Sectors</div>

@@ -71,7 +71,14 @@ router.get("/membership", async (req, res, next) => {
 // GET /member/home — sectors + nearby retailers based on the member's own village
 router.get("/home", async (req, res, next) => {
   try {
-    const user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
+    const user = await get(
+      `SELECT u.*, v.name as village_name, m.name as mandal_name
+       FROM users u
+       LEFT JOIN villages v ON v.village_id = u.village_id
+       LEFT JOIN mandals m ON m.mandal_id = v.mandal_id
+       WHERE u.user_id = ?`,
+      [req.auth.user_id]
+    );
     const categories = await all("SELECT * FROM retailer_categories ORDER BY name");
 
     let nearby = [];

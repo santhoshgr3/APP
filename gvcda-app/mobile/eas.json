@@ -11,11 +11,11 @@
     },
     "preview": {
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_API_URL": "https://api-staging.gvcdaservicehub.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://gvcda-backend.onrender.com" }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.gvcdaservicehub.com" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://gvcda-backend.onrender.com" }
     }
   },
   "submit": {
