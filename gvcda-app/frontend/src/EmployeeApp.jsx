@@ -100,14 +100,18 @@ function EnrolForm({ onBack }) {
   const [loc, setLoc] = useState({ district_id: null, mandal_id: null, village_id: null });
   const [plans, setPlans] = useState(null);
   const [planId, setPlanId] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { api.plans().then((p) => { setPlans(p); setPlanId(p[0]?.plan_id); }); }, []);
 
   const submit = async () => {
+    if (!name.trim() || phone.length !== 10 || !loc.village_id || !planId) {
+      setError("Full name, phone, location and plan are all required"); return;
+    }
     setSubmitting(true); setError("");
     try {
-      await api.enrolMember({ full_name: name, phone, village_id: loc.village_id, plan_id: planId, payment_method: "cash" });
+      await api.enrolMember({ full_name: name.trim(), phone, village_id: loc.village_id, plan_id: planId, payment_method: paymentMethod });
       onBack();
     } catch (e) { setError(e.message); setSubmitting(false); }
   };
@@ -118,7 +122,7 @@ function EnrolForm({ onBack }) {
       <Screen>
         {error && <div style={{ color: T.red, fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <Field label="Full name"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="Member's name" /></Field>
-        <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98xxxxxxxx" /></Field>
+        <Field label="Phone *"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="98xxxxxxxx" /></Field>
         <Field label="Location"><LocationCascade value={loc} onChange={setLoc} /></Field>
         {plans && (
           <Field label="Plan">
@@ -131,8 +135,13 @@ function EnrolForm({ onBack }) {
             </div>
           </Field>
         )}
-        <Field label="Payment collected via"><select style={inputStyle}><option>Cash (in person)</option><option>UPI (in person)</option></select></Field>
-        <Btn full disabled={!name || !phone || submitting} onClick={submit}>{submitting ? "Submitting..." : "Submit & Issue Card"}</Btn>
+        <Field label="Payment collected via">
+          <select style={inputStyle} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+            <option value="cash">Cash (in person)</option>
+            <option value="upi">UPI (in person)</option>
+          </select>
+        </Field>
+        <Btn full disabled={!name || phone.length !== 10 || submitting} onClick={submit}>{submitting ? "Submitting..." : "Submit & Issue Card"}</Btn>
       </Screen>
     </>
   );
@@ -148,10 +157,13 @@ function ListRetailerForm({ onBack }) {
   const [error, setError] = useState("");
   useEffect(() => { api.categories().then((c) => { setCategories(c); setCatId(c[0]?.category_id); }); }, []);
 
+  const canSubmit = name.trim() && catId && loc.village_id && phone.length === 10;
+
   const submit = async () => {
+    if (!canSubmit) { setError("Business name, phone, category and location are all required"); return; }
     setSubmitting(true); setError("");
     try {
-      await api.listRetailer({ business_name: name, category_id: catId, village_id: loc.village_id, phone });
+      await api.listRetailer({ business_name: name.trim(), category_id: catId, village_id: loc.village_id, phone });
       onBack();
     } catch (e) { setError(e.message); setSubmitting(false); }
   };
@@ -168,11 +180,11 @@ function ListRetailerForm({ onBack }) {
           </select>
         </Field>
         <Field label="Location"><LocationCascade value={loc} onChange={setLoc} /></Field>
-        <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98xxxxxxxx" /></Field>
+        <Field label="Phone *"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="98xxxxxxxx" /></Field>
         <Field label="Photos">
           <div style={{ border: `1px dashed ${T.line}`, borderRadius: 8, padding: 16, textAlign: "center", color: T.inkSoft }}><Camera size={18} style={{ margin: "0 auto 4px" }} /><div style={{ fontSize: 10.5 }}>Add storefront photos (not wired in this demo)</div></div>
         </Field>
-        <Btn full disabled={!name || submitting} onClick={submit}>{submitting ? "Submitting..." : "Submit for Approval"}</Btn>
+        <Btn full disabled={!canSubmit || submitting} onClick={submit}>{submitting ? "Submitting..." : "Submit for Approval"}</Btn>
       </Screen>
     </>
   );

@@ -233,6 +233,9 @@ router.post("/users", async (req, res, next) => {
 router.patch("/users/:id", async (req, res, next) => {
   try {
     const { is_active } = req.body;
+    if (Number(req.params.id) === req.auth.user_id) return res.status(400).json({ error: "You can't deactivate your own account" });
+    const existing = await get("SELECT 1 FROM users WHERE user_id = ?", [req.params.id]);
+    if (!existing) return res.status(404).json({ error: "User not found" });
     await run("UPDATE users SET is_active = ? WHERE user_id = ?", [is_active ? 1 : 0, req.params.id]);
     res.json(await get("SELECT * FROM users WHERE user_id = ?", [req.params.id]));
   } catch (e) { next(e); }

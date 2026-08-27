@@ -21,7 +21,9 @@ export default function ListRetailerScreen({ navigation }) {
   useEffect(() => { api.categories().then((c) => { setCategories(c); setCategoryId(c[0]?.category_id); }); }, []);
 
   const submit = async () => {
-    if (!businessName.trim() || !categoryId || !loc.village_id) { setError("Business name, category and location are required"); return; }
+    if (!businessName.trim() || !categoryId || !loc.village_id || phone.length !== 10) {
+      setError("Business name, phone, category and location are all required"); return;
+    }
     setError(""); setSaving(true);
     try {
       await api.listRetailer({ business_name: businessName.trim(), category_id: categoryId, village_id: loc.village_id, phone });
@@ -56,7 +58,7 @@ export default function ListRetailerScreen({ navigation }) {
             </Picker>
           </View>
         </Field>
-        <Field label="Phone"><Input value={phone} onChangeText={setPhone} keyboardType="number-pad" maxLength={10} /></Field>
+        <Field label="Phone *"><Input value={phone} onChangeText={setPhone} keyboardType="number-pad" maxLength={10} /></Field>
         <LocationCascade value={loc} onChange={setLoc} />
         <Btn full disabled={saving} onPress={submit} style={{ marginTop: 14 }}>{saving ? "Submitting..." : "Submit for Approval"}</Btn>
       </Screen>
