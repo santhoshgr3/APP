@@ -149,11 +149,14 @@ router.post("/orders", async (req, res, next) => {
     let total = 0;
     const lineItems = [];
     for (const i of items) {
+      const quantity = Number(i.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1) return res.status(400).json({ error: "Item quantity must be a positive whole number" });
       const product = await get("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?", [i.product_id, retailer_id]);
       if (!product) return res.status(400).json({ error: "Invalid product in order" });
-      const lineTotal = product.price * i.quantity;
+      if (!product.is_available) return res.status(400).json({ error: `${product.name} is currently unavailable` });
+      const lineTotal = product.price * quantity;
       total += lineTotal;
-      lineItems.push({ product_id: product.product_id, quantity: i.quantity, unit_price: product.price, line_total: lineTotal });
+      lineItems.push({ product_id: product.product_id, quantity, unit_price: product.price, line_total: lineTotal });
     }
 
     const commissionPct = retailer.commission_pct;

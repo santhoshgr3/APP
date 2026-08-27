@@ -3,6 +3,8 @@ const router = express.Router();
 const { get, all, run } = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 
+const PHONE_RE = /^\d{10}$/;
+
 router.use(requireAuth, requireRole("employee"));
 
 // GET /employee/dashboard
@@ -28,15 +30,24 @@ router.post("/enrol-member", async (req, res, next) => {
   try {
     const { full_name, phone, village_id, plan_id, payment_method } = req.body;
     if (!full_name || !phone || !village_id || !plan_id) return res.status(400).json({ error: "Missing required fields" });
+    if (!PHONE_RE.test(phone)) return res.status(400).json({ error: "Valid 10-digit phone number required" });
+
+    const plan = await get("SELECT * FROM membership_plans WHERE plan_id = ?", [plan_id]);
+    if (!plan) return res.status(400).json({ error: "Invalid membership plan" });
+    const village = await get("SELECT 1 FROM villages WHERE village_id = ?", [village_id]);
+    if (!village) return res.status(400).json({ error: "Invalid village" });
 
     let user = await get("SELECT * FROM users WHERE phone = ?", [phone]);
     if (!user) {
       const r = await run("INSERT INTO users (phone, full_name, role, village_id) VALUES (?, ?, 'member', ?) RETURNING user_id", [phone, full_name, village_id]);
       user = await get("SELECT * FROM users WHERE user_id = ?", [r.lastInsertRowid]);
-      await run("INSERT INTO user_roles (user_id, role) VALUES (?, 'member') ON CONFLICT DO NOTHING", [user.user_id]);
     }
+    // Grant the member role even if this phone already belonged to someone with a
+    // different role (e.g. an existing Retailer buying a membership too) — without
+    // this, their membership row would exist but they'd have no way to reach the
+    // Member screens or see it in the Role Switcher.
+    await run("INSERT INTO user_roles (user_id, role) VALUES (?, 'member') ON CONFLICT DO NOTHING", [user.user_id]);
 
-    const plan = await get("SELECT * FROM membership_plans WHERE plan_id = ?", [plan_id]);
     const cardNumber = "GVC-" + Math.floor(100000 + Math.random() * 900000);
     const result = await run(
       `INSERT INTO memberships (user_id, plan_id, card_number, start_date, end_date, amount_paid, sold_by_employee_id)
@@ -53,8 +64,17 @@ router.post("/enrol-member", async (req, res, next) => {
 router.post("/list-retailer", async (req, res, next) => {
   try {
     const { business_name, category_id, village_id, phone } = req.body;
-    if (!business_name || !category_id || !village_id) return res.status(400).json({ error: "Missing required fields" });
+    if (!business_name || !category_id || !village_id || !phone) return res.status(400).json({ error: "Missing required fields" });
+    if (!PHONE_RE.test(phone)) return res.status(400).json({ error: "Valid 10-digit phone number required" });
 
+    const category = await get("SELECT 1 FROM retailer_categories WHERE category_id = ?", [category_id]);
+    if (!category) return res.status(400).json({ error: "Invalid category" });
+    const village = await get("SELECT 1 FROM villages WHERE village_id = ?", [village_id]);
+    if (!village) return res.status(400).json({ error: "Invalid village" });
+
+    // Reuse an existing account if this phone already belongs to one (e.g. an
+    // existing Member also being onboarded as a Retailer) — same dual-role
+    // pattern as /retailer/register's self-service path.
     let user = await get("SELECT * FROM users WHERE phone = ?", [phone]);
     if (!user) {
       const r = await run("INSERT INTO users (phone, full_name, role, village_id) VALUES (?, ?, 'retailer', ?) RETURNING user_id", [phone, business_name, village_id]);

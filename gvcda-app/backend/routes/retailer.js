@@ -49,7 +49,8 @@ router.get("/products", withRetailer, async (req, res, next) => {
 router.post("/products", withRetailer, async (req, res, next) => {
   try {
     const { name, price } = req.body;
-    if (!name || !price) return res.status(400).json({ error: "name and price required" });
+    if (!name || price === undefined || price === null) return res.status(400).json({ error: "name and price required" });
+    if (!(Number(price) > 0)) return res.status(400).json({ error: "price must be greater than 0" });
     const result = await run("INSERT INTO products (retailer_id, name, price) VALUES (?, ?, ?) RETURNING product_id", [req.retailer.retailer_id, name, price]);
     res.json(await get("SELECT * FROM products WHERE product_id = ?", [result.lastInsertRowid]));
   } catch (e) { next(e); }
@@ -149,6 +150,7 @@ router.get("/commission/requests", withRetailer, async (req, res, next) => {
 router.patch("/products/:id", withRetailer, async (req, res, next) => {
   try {
     const { name, price, is_available } = req.body;
+    if (price !== undefined && price !== null && !(Number(price) > 0)) return res.status(400).json({ error: "price must be greater than 0" });
     const product = await get("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?", [req.params.id, req.retailer.retailer_id]);
     if (!product) return res.status(404).json({ error: "Product not found" });
     await run(
@@ -194,6 +196,7 @@ router.post("/promotions", withRetailer, async (req, res, next) => {
   try {
     const { title, discount_pct, start_date, end_date, scope } = req.body;
     if (!title || !discount_pct || !start_date || !end_date) return res.status(400).json({ error: "Missing required fields" });
+    if (!(Number(discount_pct) > 0) || Number(discount_pct) > 100) return res.status(400).json({ error: "discount_pct must be between 0 and 100" });
     const result = await run(
       "INSERT INTO promotions (retailer_id, title, discount_pct, start_date, end_date, scope) VALUES (?, ?, ?, ?, ?, ?) RETURNING promotion_id",
       [req.retailer.retailer_id, title, discount_pct, start_date, end_date, scope || "all_products"]

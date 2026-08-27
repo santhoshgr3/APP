@@ -36,7 +36,7 @@ export default function HomeScreen({ navigation }) {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
               <Feather name="map-pin" size={13} color={T.terracotta} />
               <Text style={{ fontSize: 12, fontWeight: "700" }}>
-                {data.user.village_id ? "Your village" : "No location set — complete your profile"}
+                {data.user.village_id ? `${data.user.village_name}, ${data.user.mandal_name}` : "No location set — complete your profile"}
               </Text>
             </View>
             <Text style={{ fontSize: 18, fontWeight: "800", color: T.tealDark, marginBottom: 14 }}>
