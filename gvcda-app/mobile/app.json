@@ -40,6 +40,11 @@
           "cameraPermission": "GVCDA uses your camera to take storefront and product photos."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c7d33001-6c9a-444a-a664-5d01a3afaf38"
+      }
+    }
   }
 }
