@@ -4,6 +4,8 @@ const { get, all, run } = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
 const broadcasts = require("../lib/broadcasts");
+const { sendPush } = require("../lib/push");
+const { recomputeRating } = require("../lib/reviews");
 
 router.use(requireAuth); // every route below requires a logged-in user
 
@@ -109,12 +111,12 @@ router.get("/home", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /member/retailers?category_id=2&village_id=1  (village_id optional -> defaults to member's own)
+// GET /member/retailers?category_id=2&village_id=1&q=grocery  (village_id optional -> defaults to member's own)
 router.get("/retailers", async (req, res, next) => {
   try {
     const user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
     const villageId = req.query.village_id || user.village_id;
-    const { category_id } = req.query;
+    const { category_id, q } = req.query;
 
     let sql = `SELECT r.*, v.name as village_name, c.name as category_name,
                       (SELECT filename FROM retailer_photos WHERE retailer_id = r.retailer_id ORDER BY is_primary DESC, created_at LIMIT 1) as primary_photo
@@ -125,6 +127,7 @@ router.get("/retailers", async (req, res, next) => {
     const params = [];
     if (villageId) { sql += " AND r.village_id = ?"; params.push(villageId); }
     if (category_id) { sql += " AND r.category_id = ?"; params.push(category_id); }
+    if (q && q.trim()) { sql += " AND r.business_name ILIKE ?"; params.push(`%${q.trim()}%`); }
 
     res.json(await all(sql, params));
   } catch (e) { next(e); }
@@ -147,7 +150,13 @@ router.get("/retailers/:id", async (req, res, next) => {
       [req.params.id]
     );
     const photos = await all("SELECT * FROM retailer_photos WHERE retailer_id = ? ORDER BY is_primary DESC, created_at", [req.params.id]);
-    res.json({ retailer, products, promotions, photos });
+    const reviews = await all(
+      `SELECT rv.rating, rv.comment, rv.created_at, u.full_name as member_name
+       FROM reviews rv JOIN users u ON u.user_id = rv.member_id
+       WHERE rv.retailer_id = ? ORDER BY rv.created_at DESC LIMIT 20`,
+      [req.params.id]
+    );
+    res.json({ retailer, products, promotions, photos, reviews });
   } catch (e) { next(e); }
 });
 
@@ -199,7 +208,54 @@ router.post("/orders", async (req, res, next) => {
     }
 
     const order = await get("SELECT * FROM orders WHERE order_id = ?", [orderResult.lastInsertRowid]);
+
+    get("SELECT push_token FROM users WHERE user_id = ?", [retailer.user_id])
+      .then((u) => sendPush([u?.push_token], { title: "New order!", body: `Order #${order.order_id} — ₹${total}`, data: { type: "new_order", order_id: order.order_id } }))
+      .catch((e) => console.error("New-order push failed:", e.message));
+
     res.json({ order });
+  } catch (e) { next(e); }
+});
+
+// PATCH /member/orders/:id/cancel — only while the retailer hasn't acted on it yet.
+router.patch("/orders/:id/cancel", async (req, res, next) => {
+  try {
+    const order = await get("SELECT * FROM orders WHERE order_id = ? AND member_id = ?", [req.params.id, req.auth.user_id]);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status !== "placed") return res.status(400).json({ error: "This order can no longer be cancelled" });
+    await run("UPDATE orders SET status = 'cancelled' WHERE order_id = ?", [order.order_id]);
+    res.json({ order: await get("SELECT * FROM orders WHERE order_id = ?", [order.order_id]) });
+  } catch (e) { next(e); }
+});
+
+// POST /member/orders/:id/review { rating, comment? } — one review per fulfilled order.
+router.post("/orders/:id/review", async (req, res, next) => {
+  try {
+    const { rating, comment } = req.body;
+    const r = Number(rating);
+    if (!Number.isInteger(r) || r < 1 || r > 5) return res.status(400).json({ error: "Rating must be a whole number from 1 to 5" });
+
+    const order = await get("SELECT * FROM orders WHERE order_id = ? AND member_id = ?", [req.params.id, req.auth.user_id]);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.status !== "fulfilled") return res.status(400).json({ error: "You can only review a fulfilled order" });
+
+    const existing = await get("SELECT 1 FROM reviews WHERE order_id = ?", [order.order_id]);
+    if (existing) return res.status(409).json({ error: "You already reviewed this order" });
+
+    await run("INSERT INTO reviews (retailer_id, member_id, order_id, rating, comment) VALUES (?, ?, ?, ?, ?)",
+      [order.retailer_id, req.auth.user_id, order.order_id, r, comment || null]);
+    await recomputeRating(order.retailer_id);
+
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// GET /member/referrals — this member's own referral code + how many people used it
+router.get("/referrals", async (req, res, next) => {
+  try {
+    const user = await get("SELECT referral_code FROM users WHERE user_id = ?", [req.auth.user_id]);
+    const count = (await get("SELECT COUNT(*) c FROM users WHERE referred_by = ?", [req.auth.user_id])).c;
+    res.json({ referral_code: user.referral_code, referred_count: Number(count) });
   } catch (e) { next(e); }
 });
 
@@ -262,7 +318,9 @@ router.get("/complaints", async (req, res, next) => {
 router.get("/orders/:id", async (req, res, next) => {
   try {
     const order = await get(
-      `SELECT o.*, r.business_name FROM orders o JOIN retailers r ON r.retailer_id = o.retailer_id
+      `SELECT o.*, r.business_name,
+              EXISTS(SELECT 1 FROM reviews WHERE order_id = o.order_id) as reviewed
+       FROM orders o JOIN retailers r ON r.retailer_id = o.retailer_id
        WHERE o.order_id = ? AND o.member_id = ?`,
       [req.params.id, req.auth.user_id]
     );

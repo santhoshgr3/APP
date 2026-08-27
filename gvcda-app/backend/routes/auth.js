@@ -4,6 +4,7 @@ const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const router = express.Router();
 const { get, all, run } = require("../db");
 const { signToken, requireAuth } = require("../middleware/auth");
+const { generateUniqueReferralCode, ensureReferralCode } = require("../lib/referrals");
 
 const PHONE_RE = /^\d{10}$/;
 
@@ -30,23 +31,31 @@ const registerLimiter = rateLimit({
   message: { error: "Too many accounts created from this network. Try again later." },
 });
 
-// POST /auth/register { phone, password, full_name }
+// POST /auth/register { phone, password, full_name, referral_code? }
 // Self-signup — always creates a "member" account (Employee/Retailer-only accounts
 // are created by an Admin via /admin/users, Retailer role is added later via
 // /retailer/register on top of an existing member login).
 router.post("/register", registerLimiter, async (req, res, next) => {
   try {
-    const { phone, password, full_name } = req.body;
+    const { phone, password, full_name, referral_code } = req.body;
     if (!phone || !PHONE_RE.test(phone)) return res.status(400).json({ error: "Valid 10-digit phone number required" });
     if (!password || password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
 
     const existing = await get("SELECT 1 FROM users WHERE phone = ?", [phone]);
     if (existing) return res.status(409).json({ error: "An account with this phone number already exists — log in instead" });
 
+    let referredBy = null;
+    if (referral_code && referral_code.trim()) {
+      const referrer = await get("SELECT user_id FROM users WHERE referral_code = ?", [referral_code.trim().toUpperCase()]);
+      if (!referrer) return res.status(400).json({ error: "Referral code not found" });
+      referredBy = referrer.user_id;
+    }
+
     const password_hash = await bcrypt.hash(password, 10);
+    const myReferralCode = await generateUniqueReferralCode();
     const result = await run(
-      "INSERT INTO users (phone, password_hash, full_name, role) VALUES (?, ?, ?, 'member') RETURNING user_id",
-      [phone, password_hash, full_name || "New Member"]
+      "INSERT INTO users (phone, password_hash, full_name, role, referred_by, referral_code) VALUES (?, ?, ?, 'member', ?, ?) RETURNING user_id",
+      [phone, password_hash, full_name || "New Member", referredBy, myReferralCode]
     );
     const user = await get("SELECT * FROM users WHERE user_id = ?", [result.lastInsertRowid]);
     await run("INSERT INTO user_roles (user_id, role) VALUES (?, 'member') ON CONFLICT DO NOTHING", [user.user_id]);
@@ -80,9 +89,34 @@ router.post("/login", loginLimiter, async (req, res, next) => {
 // GET /auth/me
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
-    const user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
+    let user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
+    // Accounts created before the referral feature existed don't have a code yet.
+    if (!user.referral_code) {
+      await ensureReferralCode(user.user_id);
+      user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
+    }
     const roles = (await all("SELECT role FROM user_roles WHERE user_id = ?", [req.auth.user_id])).map((r) => r.role);
     res.json({ user, roles: roles.length ? roles : [user.role] });
+  } catch (e) { next(e); }
+});
+
+// POST /auth/push-token { token } — registers this device for Expo push notifications.
+router.post("/push-token", requireAuth, async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: "token required" });
+    await run("UPDATE users SET push_token = ? WHERE user_id = ?", [token, req.auth.user_id]);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// PATCH /auth/language { language: 'en' | 'te' }
+router.patch("/language", requireAuth, async (req, res, next) => {
+  try {
+    const { language } = req.body;
+    if (!["en", "te"].includes(language)) return res.status(400).json({ error: "Invalid language" });
+    await run("UPDATE users SET language = ? WHERE user_id = ?", [language, req.auth.user_id]);
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

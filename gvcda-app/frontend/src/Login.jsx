@@ -7,6 +7,7 @@ export default function Login({ onLoggedIn }) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -15,7 +16,7 @@ export default function Login({ onLoggedIn }) {
     try {
       const res = mode === "login"
         ? await api.login(phone, password)
-        : await api.register(phone, password, fullName);
+        : await api.register(phone, password, fullName, referralCode.trim() || undefined);
       saveSession(res.token, res.user, res.roles);
       onLoggedIn(res.user);
     } catch (e) { setError(e.message); }
@@ -34,9 +35,14 @@ export default function Login({ onLoggedIn }) {
       <ErrorBanner message={error} />
 
       {mode === "register" && (
-        <Field label="Full name">
-          <input style={inputStyle} placeholder="Your name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        </Field>
+        <>
+          <Field label="Full name">
+            <input style={inputStyle} placeholder="Your name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </Field>
+          <Field label="Referral code (optional)">
+            <input style={inputStyle} placeholder="e.g. 4ABA41" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />
+          </Field>
+        </>
       )}
       <Field label="Mobile number">
         <input style={inputStyle} placeholder="10-digit mobile number" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />

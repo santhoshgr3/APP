@@ -46,7 +46,7 @@ export function photoUrl(filename) {
 
 export const api = {
   // auth
-  register: (phone, password, full_name) => request("/auth/register", { method: "POST", body: { phone, password, full_name }, auth: false }),
+  register: (phone, password, full_name, referral_code) => request("/auth/register", { method: "POST", body: { phone, password, full_name, referral_code }, auth: false }),
   login: (phone, password) => request("/auth/login", { method: "POST", body: { phone, password }, auth: false }),
   me: () => request("/auth/me"),
   switchRole: (role) => request("/auth/switch-role", { method: "POST", body: { role } }),
@@ -80,6 +80,9 @@ export const api = {
   raiseComplaint: (category, description, against_retailer_id) => request("/member/complaints", { method: "POST", body: { category, description, against_retailer_id } }),
   memberComplaints: () => request("/member/complaints"),
   memberOrderDetail: (id) => request(`/member/orders/${id}`),
+  cancelOrder: (id) => request(`/member/orders/${id}/cancel`, { method: "PATCH" }),
+  submitReview: (order_id, rating, comment) => request(`/member/orders/${order_id}/review`, { method: "POST", body: { rating, comment } }),
+  memberReferrals: () => request("/member/referrals"),
 
   // employee
   employeeDashboard: () => request("/employee/dashboard"),
@@ -104,6 +107,8 @@ export const api = {
   retailerOrderDetail: (id) => request(`/retailer/orders/${id}`),
   updateOrderStatus: (id, status) => request(`/retailer/orders/${id}`, { method: "PATCH", body: { status } }),
   retailerEarnings: () => request("/retailer/earnings"),
+  retailerEarningsTrend: (days = 30) => request(`/retailer/earnings/trend?days=${days}`),
+  retailerReviews: () => request("/retailer/reviews"),
   commissionCheckout: () => request("/retailer/commission/checkout", { method: "POST" }),
   submitCommissionUtr: (request_id, utr) => request("/retailer/commission/submit-utr", { method: "POST", body: { request_id, utr } }),
   commissionRequests: () => request("/retailer/commission/requests"),

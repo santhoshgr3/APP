@@ -79,6 +79,10 @@ CREATE TABLE IF NOT EXISTS users (
   age INTEGER,
   gender TEXT,
   address TEXT,
+  referral_code TEXT UNIQUE,
+  referred_by INTEGER REFERENCES users(user_id),
+  push_token TEXT,
+  language TEXT NOT NULL DEFAULT 'en' CHECK(language IN ('en','te')),
   role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','employee','retailer','admin')),
   village_id INTEGER REFERENCES villages(village_id),
   designation TEXT,               -- for employees: district_manager/mandal_sub_manager/zonal_manager/volunteer
@@ -95,6 +99,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT '
 ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by INTEGER REFERENCES users(user_id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en';
 
 -- A user's phone/OTP session is one login, but the account can hold more than one
 -- role at once (e.g. Member + Retailer). users.role is the "default/active" role
@@ -151,6 +159,18 @@ CREATE TABLE IF NOT EXISTS retailers (
   commission_pct REAL NOT NULL DEFAULT 8.0,
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','suspended')),
   rating_avg REAL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- One review per fulfilled order, so ratings can't be spammed without ever having
+-- bought anything. retailers.rating_avg is recomputed after every insert.
+CREATE TABLE IF NOT EXISTS reviews (
+  review_id SERIAL PRIMARY KEY,
+  retailer_id INTEGER NOT NULL REFERENCES retailers(retailer_id),
+  member_id INTEGER NOT NULL REFERENCES users(user_id),
+  order_id INTEGER NOT NULL UNIQUE REFERENCES orders(order_id),
+  rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+  comment TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

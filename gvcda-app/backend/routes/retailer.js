@@ -5,6 +5,8 @@ const { requireAuth } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
 const { uploadPhotos, uploadSingleImage, saveFiles, deleteFile } = require("../lib/uploads");
 const broadcasts = require("../lib/broadcasts");
+const { sendPush } = require("../lib/push");
+const { recomputeRating } = require("../lib/reviews");
 
 router.use(requireAuth);
 
@@ -100,6 +102,16 @@ router.patch("/orders/:id", withRetailer, async (req, res, next) => {
 
     const fulfilledAt = status === "fulfilled" ? new Date().toISOString() : order.fulfilled_at;
     await run("UPDATE orders SET status = ?, fulfilled_at = ? WHERE order_id = ?", [status, fulfilledAt, order.order_id]);
+
+    const STATUS_MESSAGE = {
+      accepted: "Your order was accepted and is being prepared.",
+      rejected: "Your order was rejected by the retailer.",
+      fulfilled: "Your order has been delivered!",
+    };
+    get("SELECT push_token FROM users WHERE user_id = ?", [order.member_id])
+      .then((u) => sendPush([u?.push_token], { title: `Order #${order.order_id} update`, body: STATUS_MESSAGE[status], data: { type: "order_status", order_id: order.order_id } }))
+      .catch((e) => console.error("Order status push failed:", e.message));
+
     res.json(await get("SELECT * FROM orders WHERE order_id = ?", [order.order_id]));
   } catch (e) { next(e); }
 });
@@ -120,6 +132,40 @@ router.get("/earnings", withRetailer, async (req, res, next) => {
       [req.retailer.retailer_id]
     );
     res.json(row);
+  } catch (e) { next(e); }
+});
+
+// GET /retailer/earnings/trend?days=30 — daily fulfilled-order sales, oldest first,
+// zero-filled for days with no orders so a chart doesn't have to guess at gaps.
+router.get("/earnings/trend", withRetailer, async (req, res, next) => {
+  try {
+    const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
+    const rows = await all(
+      `SELECT TO_CHAR(placed_at, 'YYYY-MM-DD') as day, COALESCE(SUM(order_total),0) as gross, COUNT(*) as order_count
+       FROM orders
+       WHERE retailer_id = ? AND status = 'fulfilled' AND placed_at >= NOW() - (? || ' days')::interval
+       GROUP BY day ORDER BY day`,
+      [req.retailer.retailer_id, days]
+    );
+    const byDay = Object.fromEntries(rows.map((r) => [r.day, r]));
+    const result = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+      result.push(byDay[d] || { day: d, gross: 0, order_count: 0 });
+    }
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+// GET /retailer/reviews — this retailer's own reviews
+router.get("/reviews", withRetailer, async (req, res, next) => {
+  try {
+    res.json(await all(
+      `SELECT rv.rating, rv.comment, rv.created_at, u.full_name as member_name
+       FROM reviews rv JOIN users u ON u.user_id = rv.member_id
+       WHERE rv.retailer_id = ? ORDER BY rv.created_at DESC LIMIT 50`,
+      [req.retailer.retailer_id]
+    ));
   } catch (e) { next(e); }
 });
 

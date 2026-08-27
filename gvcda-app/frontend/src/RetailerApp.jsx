@@ -307,6 +307,8 @@ function AddProductForm({ onBack }) {
 function EarningsTab({ refreshKey }) {
   const [e, setE] = useState(null);
   const [history, setHistory] = useState(null);
+  const [trend, setTrend] = useState(null);
+  const [reviews, setReviews] = useState(null);
   const [checkout, setCheckout] = useState(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
@@ -314,6 +316,8 @@ function EarningsTab({ refreshKey }) {
   const load = () => {
     api.retailerEarnings().then(setE);
     api.commissionRequests().then(setHistory);
+    api.retailerEarningsTrend(14).then(setTrend);
+    api.retailerReviews().then(setReviews);
   };
   useEffect(load, [refreshKey]);
 
@@ -348,6 +352,20 @@ function EarningsTab({ refreshKey }) {
         <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 8 }}>{e.order_count} fulfilled order(s) to date.</div>
       </Card>
 
+      {trend && (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.inkSoft, marginBottom: 10 }}>SALES — LAST 14 DAYS</div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 60 }}>
+            {trend.map((d) => {
+              const max = Math.max(...trend.map((x) => x.gross), 1);
+              return (
+                <div key={d.day} title={`${d.day}: ₹${d.gross}`} style={{ flex: 1, height: `${Math.max(4, (d.gross / max) * 100)}%`, background: d.gross > 0 ? T.teal : T.line, borderRadius: 2 }} />
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       <Card style={{ marginBottom: 14, background: e.commission_owed > 0 ? T.terracottaLight : undefined }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
@@ -372,6 +390,21 @@ function EarningsTab({ refreshKey }) {
             <Chip tone={h.status === "verified" ? "teal" : h.status === "rejected" ? "red" : "gold"}>{h.status}</Chip>
           </Card>
         ))
+      )}
+
+      {reviews && reviews.length > 0 && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>Customer Reviews</div>
+          {reviews.map((r, i) => (
+            <Card key={i} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{r.member_name}</span>
+                <span style={{ fontSize: 11, color: T.gold, fontWeight: 700 }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+              </div>
+              {r.comment && <div style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 4 }}>{r.comment}</div>}
+            </Card>
+          ))}
+        </>
       )}
     </Screen>
   );

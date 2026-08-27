@@ -111,6 +111,7 @@ export default function MemberApp({ user, roles = [], onLogout, onRoleChanged })
       onBack={pop}
       onPlaced={() => { setCart([]); setStack([]); setTab("orders"); }} />
   );
+  if (top?.screen === "orderDetail") return <OrderDetail id={top.params.id} onBack={pop} />;
   if (top?.screen === "jobDetail") return <JobDetail id={top.params.id} onBack={pop} />;
   if (top?.screen === "complaint") return <ComplaintForm onBack={pop} />;
   if (top?.screen === "buyPlan") return <BuyPlan onBack={pop} onDone={() => { pop(); changeTab("profile"); }} />;
@@ -119,7 +120,7 @@ export default function MemberApp({ user, roles = [], onLogout, onRoleChanged })
 
   const tabs = [
     { id: "home", label: "Home", icon: Home, Comp: () => <HomeTab push={push} user={user} /> },
-    { id: "orders", label: "Orders", icon: ClipboardList, Comp: OrdersTab },
+    { id: "orders", label: "Orders", icon: ClipboardList, Comp: () => <OrdersTab push={push} /> },
     { id: "jobs", label: "Jobs", icon: Briefcase, Comp: () => <JobsTab push={push} /> },
     { id: "profile", label: "Profile", icon: User, Comp: () => <ProfileTab user={user} roles={roles} push={push} onLogout={onLogout} /> },
   ];
@@ -175,13 +176,23 @@ function HomeTab({ push, user }) {
 
 function SectorDetail({ categoryId, categoryName, onBack, onOpenRetailer }) {
   const [list, setList] = useState(null);
-  useEffect(() => { api.memberRetailers({ category_id: categoryId }).then(setList); }, [categoryId]);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const params = { category_id: categoryId };
+    if (q.trim()) params.q = q.trim();
+    const t = setTimeout(() => api.memberRetailers(params).then(setList), 250);
+    return () => clearTimeout(t);
+  }, [categoryId, q]);
   if (!list) return <><TopBar title={categoryName} onBack={onBack} /><LoadingScreen /></>;
   return (
     <>
       <TopBar title={categoryName} subtitle="Your Mandal & nearby" onBack={onBack} />
       <Screen>
-        {list.length === 0 && <EmptyState icon={Search} text={`No ${categoryName} retailers listed in your Mandal yet.`} />}
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <Search size={14} color={T.inkSoft} style={{ position: "absolute", left: 10, top: 10 }} />
+          <input style={{ ...inputStyle, paddingLeft: 30 }} placeholder="Search retailers..." value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        {list.length === 0 && <EmptyState icon={Search} text={q ? `No results for "${q}".` : `No ${categoryName} retailers listed in your Mandal yet.`} />}
         {list.map((r) => (
           <Card key={r.retailer_id} onClick={() => onOpenRetailer(r.retailer_id)} style={{ marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -205,6 +216,11 @@ function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
     <>
       <TopBar title={data.retailer.business_name} subtitle={`${data.retailer.village_name} • ${data.retailer.category_name}`} onBack={onBack} />
       <Screen>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 12 }}>
+          <Star size={14} fill={T.gold} color={T.gold} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.gold }}>{data.retailer.rating_avg || "New"}</span>
+          <span style={{ fontSize: 11, color: T.inkSoft }}>({data.reviews?.length || 0} review{data.reviews?.length === 1 ? "" : "s"})</span>
+        </div>
         {data.photos?.length > 0 && (
           <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16, paddingBottom: 2 }}>
             {data.photos.map((p) => (
@@ -227,6 +243,22 @@ function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
             <Btn variant="secondary" onClick={() => onAdd(p)}><Plus size={12} /> Add</Btn>
           </Card>
         ))}
+        {data.reviews?.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>Reviews</div>
+            {data.reviews.map((r, i) => (
+              <Card key={i} style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{r.member_name}</span>
+                  <div style={{ display: "flex", gap: 1 }}>
+                    {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={12} fill={n <= r.rating ? T.gold : "none"} color={T.gold} />)}
+                  </div>
+                </div>
+                {r.comment && <div style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 4 }}>{r.comment}</div>}
+              </Card>
+            ))}
+          </>
+        )}
       </Screen>
       {cart.length > 0 && (
         <div style={{ padding: 14, borderTop: `1px solid ${T.line}` }}>
@@ -289,7 +321,7 @@ function CartScreen({ cart, setCart, total, user, onBack, onPlaced }) {
   );
 }
 
-function OrdersTab() {
+function OrdersTab({ push }) {
   const [orders, setOrders] = useState(null);
   useEffect(() => { api.memberOrders().then(setOrders); }, []);
   if (!orders) return <LoadingScreen />;
@@ -298,15 +330,114 @@ function OrdersTab() {
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Your Orders</div>
       {orders.length === 0 && <EmptyState icon={ClipboardList} text="No orders yet." />}
       {orders.map((o) => (
-        <Card key={o.order_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Card key={o.order_id} onClick={() => push("orderDetail", { id: o.order_id })} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
           <div>
             <div style={{ fontSize: 12.5, fontWeight: 700 }}>#{o.order_id} • {o.business_name}</div>
             <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>₹{o.order_total} • {new Date(o.placed_at).toLocaleDateString()}</div>
           </div>
-          <Chip tone={o.status === "fulfilled" ? "teal" : o.status === "rejected" ? "red" : "gold"}>{o.status}</Chip>
+          <Chip tone={o.status === "fulfilled" ? "teal" : ["rejected", "cancelled"].includes(o.status) ? "red" : "gold"}>{o.status}</Chip>
         </Card>
       ))}
     </Screen>
+  );
+}
+
+const ORDER_STEPS = ["placed", "accepted", "fulfilled"];
+const ORDER_STEP_LABEL = { placed: "Placed", accepted: "Accepted", fulfilled: "Fulfilled" };
+
+function OrderDetail({ id, onBack }) {
+  const [data, setData] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = () => api.memberOrderDetail(id).then(setData);
+  useEffect(() => { load(); }, [id]);
+
+  if (!data) return <><TopBar title="Order" onBack={onBack} /><LoadingScreen /></>;
+  const { order, items } = data;
+  const isBad = ["rejected", "cancelled"].includes(order.status);
+  const stepIdx = ORDER_STEPS.indexOf(order.status);
+
+  const cancel = async () => {
+    if (!window.confirm("Cancel this order?")) return;
+    setCancelling(true); setError("");
+    try { await api.cancelOrder(id); await load(); }
+    catch (e) { setError(e.message); }
+    setCancelling(false);
+  };
+
+  const submitReview = async () => {
+    if (!rating) { setError("Pick a star rating"); return; }
+    setSubmittingReview(true); setError("");
+    try { await api.submitReview(id, rating, comment.trim() || undefined); await load(); }
+    catch (e) { setError(e.message); }
+    setSubmittingReview(false);
+  };
+
+  return (
+    <>
+      <TopBar title={`Order #${order.order_id}`} subtitle={order.business_name} onBack={onBack} />
+      <Screen>
+        <ErrorBanner message={error} />
+        {isBad ? (
+          <Card style={{ marginBottom: 16, background: T.redLight, borderColor: T.redLight }}>
+            <div style={{ color: T.red, fontWeight: 700, fontSize: 13 }}>
+              Order {order.status === "rejected" ? "rejected by retailer" : "cancelled"}
+            </div>
+          </Card>
+        ) : (
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, padding: "0 4px" }}>
+            {ORDER_STEPS.map((s, i) => (
+              <div key={s} style={{ textAlign: "center", flex: 1 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 13, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", background: i <= stepIdx ? T.teal : T.line, color: "#fff", fontSize: 11 }}>
+                  {i <= stepIdx ? "✓" : ""}
+                </div>
+                <div style={{ fontSize: 10, marginTop: 5, fontWeight: i === stepIdx ? 700 : 500, color: i <= stepIdx ? T.teal : T.inkSoft }}>{ORDER_STEP_LABEL[s]}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Card style={{ marginBottom: 10, background: T.tealLight, borderColor: T.tealLight }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.teal, marginBottom: 4 }}>DELIVER TO</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{order.delivery_address || "No address provided"}</div>
+        </Card>
+
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Items</div>
+        {items.map((i) => (
+          <Card key={i.order_item_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 12.5 }}>{i.name} × {i.quantity}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700 }}>₹{i.line_total}</span>
+          </Card>
+        ))}
+        <Card style={{ marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
+          <span style={{ fontWeight: 700 }}>Total</span><span style={{ fontWeight: 800, color: T.teal }}>₹{order.order_total}</span>
+        </Card>
+
+        {order.status === "placed" && (
+          <Btn full variant="danger" onClick={cancel} disabled={cancelling}>{cancelling ? "Cancelling..." : "Cancel Order"}</Btn>
+        )}
+
+        {order.status === "fulfilled" && !order.reviewed && (
+          <Card>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>Rate this order</div>
+            <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Star key={n} size={22} color={T.gold} fill={n <= rating ? T.gold : "none"} style={{ cursor: "pointer" }} onClick={() => setRating(n)} />
+              ))}
+            </div>
+            <input style={{ ...inputStyle, marginBottom: 10 }} placeholder="Optional comment" value={comment} onChange={(e) => setComment(e.target.value)} />
+            <Btn full onClick={submitReview} disabled={submittingReview}>{submittingReview ? "Submitting..." : "Submit Review"}</Btn>
+          </Card>
+        )}
+        {order.status === "fulfilled" && order.reviewed && (
+          <div style={{ fontSize: 12, color: T.inkSoft, textAlign: "center" }}>You've already reviewed this order. Thanks!</div>
+        )}
+      </Screen>
+    </>
   );
 }
 
@@ -448,7 +579,16 @@ function BuyPlan({ onBack, onDone }) {
 
 function ProfileTab({ user, roles, push, onLogout }) {
   const [membership, setMembership] = useState(undefined);
+  const [referrals, setReferrals] = useState(null);
+  const [copied, setCopied] = useState(false);
   useEffect(() => { api.memberMembership().then((r) => setMembership(r.membership)); }, []);
+  useEffect(() => { api.memberReferrals().then(setReferrals); }, []);
+
+  const copyReferral = () => {
+    navigator.clipboard?.writeText(referrals.referral_code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
     <Screen>
@@ -480,6 +620,18 @@ function ProfileTab({ user, roles, push, onLogout }) {
         </div>
       )}
 
+      {referrals && (
+        <Card style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.inkSoft, marginBottom: 4 }}>INVITE FRIENDS</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: T.teal, letterSpacing: 1 }}>{referrals.referral_code}</div>
+            <Btn variant="secondary" onClick={copyReferral}>{copied ? "Copied!" : "Copy Code"}</Btn>
+          </div>
+          <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 6 }}>
+            Share this code — {referrals.referred_count} friend{referrals.referred_count === 1 ? "" : "s"} joined using it so far.
+          </div>
+        </Card>
+      )}
       <Btn full variant="ghost" onClick={() => push("complaint")} style={{ marginBottom: 8 }}><AlertCircle size={13} /> Raise a complaint</Btn>
       {!roles.includes("retailer") && (
         <Btn full variant="ghost" onClick={() => push("becomeRetailer")} style={{ marginBottom: 8 }}>

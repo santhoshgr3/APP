@@ -25,4 +25,25 @@ async function getVisibleBroadcasts(userId, limit = 10) {
   );
 }
 
-module.exports = { getVisibleBroadcasts };
+// The set of push tokens for every user this broadcast targets — same
+// district/mandal/all matching as getVisibleBroadcasts, just the reverse
+// direction (which users match a target, not which broadcasts match a user).
+async function getRecipientPushTokens({ target_scope, target_district_id, target_mandal_id }) {
+  let sql = `SELECT DISTINCT u.push_token
+             FROM users u
+             LEFT JOIN villages v ON v.village_id = u.village_id
+             LEFT JOIN mandals vm ON vm.mandal_id = v.mandal_id
+             WHERE u.push_token IS NOT NULL`;
+  const params = [];
+  if (target_scope === "district") {
+    sql += " AND ? = COALESCE(vm.district_id, u.territory_district_id)";
+    params.push(target_district_id);
+  } else if (target_scope === "mandal") {
+    sql += " AND ? = COALESCE(v.mandal_id, u.territory_mandal_id)";
+    params.push(target_mandal_id);
+  }
+  const rows = await all(sql, params);
+  return rows.map((r) => r.push_token);
+}
+
+module.exports = { getVisibleBroadcasts, getRecipientPushTokens };

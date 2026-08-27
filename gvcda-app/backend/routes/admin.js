@@ -4,6 +4,8 @@ const router = express.Router();
 const { get, all, run } = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
+const { getRecipientPushTokens } = require("../lib/broadcasts");
+const { sendPush } = require("../lib/push");
 
 router.use(requireAuth, requireRole("admin"));
 
@@ -185,6 +187,12 @@ router.post("/broadcasts", async (req, res, next) => {
        VALUES (?, ?, ?, ?, ?, ?) RETURNING broadcast_id`,
       [message, target_scope || "all", target_district_id || null, target_mandal_id || null, req.auth.user_id, recipientCount]
     );
+
+    // Push notification is on top of the in-app Announcements feed (see
+    // lib/broadcasts.js) — best-effort, never blocks the response on failure.
+    getRecipientPushTokens({ target_scope: target_scope || "all", target_district_id, target_mandal_id })
+      .then((tokens) => sendPush(tokens, { title: "GVCDA Announcement", body: message, data: { type: "broadcast" } }))
+      .catch((e) => console.error("Broadcast push failed:", e.message));
 
     res.json(await get("SELECT * FROM broadcasts WHERE broadcast_id = ?", [result.lastInsertRowid]));
   } catch (e) { next(e); }
