@@ -51,10 +51,10 @@ export default function RegistrationScreen({ navigation }) {
         </Field>
         <Field label="Gender">
           <View style={{ borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: "#fff" }}>
-            <Picker selectedValue={gender} onValueChange={setGender}>
-              <Picker.Item label="Female" value="female" />
-              <Picker.Item label="Male" value="male" />
-              <Picker.Item label="Prefer not to say" value="unspecified" />
+            <Picker style={{ color: T.ink }} selectedValue={gender} onValueChange={setGender}>
+              <Picker.Item label="Female" value="female" color={T.ink} />
+              <Picker.Item label="Male" value="male" color={T.ink} />
+              <Picker.Item label="Prefer not to say" value="unspecified" color={T.ink} />
             </Picker>
           </View>
         </Field>

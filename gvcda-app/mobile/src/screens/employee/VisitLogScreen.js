@@ -60,8 +60,8 @@ export default function VisitLogScreen() {
         <ErrorBanner message={error} />
         <Field label="Purpose">
           <View style={{ borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: "#fff" }}>
-            <Picker selectedValue={purpose} onValueChange={setPurpose}>
-              {PURPOSES.map(([v, l]) => <Picker.Item key={v} label={l} value={v} />)}
+            <Picker style={{ color: T.ink }} selectedValue={purpose} onValueChange={setPurpose}>
+              {PURPOSES.map(([v, l]) => <Picker.Item key={v} label={l} value={v} color={T.ink} />)}
             </Picker>
           </View>
         </Field>

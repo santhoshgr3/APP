@@ -53,8 +53,8 @@ export default function ListRetailerScreen({ navigation }) {
         <Field label="Business name *"><Input value={businessName} onChangeText={setBusinessName} /></Field>
         <Field label="Category *">
           <View style={{ borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: "#fff" }}>
-            <Picker selectedValue={categoryId ?? ""} onValueChange={setCategoryId}>
-              {categories.map((c) => <Picker.Item key={c.category_id} label={c.name} value={c.category_id} />)}
+            <Picker style={{ color: T.ink }} selectedValue={categoryId ?? ""} onValueChange={setCategoryId}>
+              {categories.map((c) => <Picker.Item key={c.category_id} label={c.name} value={c.category_id} color={T.ink} />)}
             </Picker>
           </View>
         </Field>

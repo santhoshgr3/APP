@@ -62,17 +62,17 @@ export default function EnrolMemberScreen({ navigation }) {
         <View style={{ height: 8 }} />
         <Field label="Membership plan">
           <View style={{ borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: "#fff" }}>
-            <Picker selectedValue={planId ?? ""} onValueChange={setPlanId}>
-              {plans.map((p) => <Picker.Item key={p.plan_id} label={`${p.name} — ₹${p.price}`} value={p.plan_id} />)}
+            <Picker style={{ color: T.ink }} selectedValue={planId ?? ""} onValueChange={setPlanId}>
+              {plans.map((p) => <Picker.Item key={p.plan_id} label={`${p.name} — ₹${p.price}`} value={p.plan_id} color={T.ink} />)}
             </Picker>
           </View>
         </Field>
         <Field label="Payment collection">
           <View style={{ borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: "#fff" }}>
-            <Picker selectedValue={paymentMethod} onValueChange={setPaymentMethod}>
-              <Picker.Item label="Cash collected in field" value="cash" />
-              <Picker.Item label="UPI collected in field" value="upi" />
-              <Picker.Item label="Online payment link sent" value="link" />
+            <Picker style={{ color: T.ink }} selectedValue={paymentMethod} onValueChange={setPaymentMethod}>
+              <Picker.Item label="Cash collected in field" value="cash" color={T.ink} />
+              <Picker.Item label="UPI collected in field" value="upi" color={T.ink} />
+              <Picker.Item label="Online payment link sent" value="link" color={T.ink} />
             </Picker>
           </View>
         </Field>

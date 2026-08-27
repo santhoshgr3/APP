@@ -39,7 +39,7 @@ export default function Login({ onLoggedIn }) {
         </Field>
       )}
       <Field label="Mobile number">
-        <input style={inputStyle} placeholder="9000000003 (demo member)" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+        <input style={inputStyle} placeholder="10-digit mobile number" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />
       </Field>
       <Field label="Password">
         <input style={inputStyle} type="password" placeholder={mode === "register" ? "At least 6 characters" : "••••••••"} value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -51,18 +51,6 @@ export default function Login({ onLoggedIn }) {
       <Btn full variant="ghost" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} style={{ marginTop: 8 }}>
         {mode === "login" ? "New here? Create an account" : "Already have an account? Log in"}
       </Btn>
-
-      {mode === "login" && (
-        <div style={{ marginTop: 18, fontSize: 11, color: T.inkSoft, lineHeight: 1.6 }}>
-          <b>Demo accounts (seeded)</b> — password <b>gvcda123</b> for all:<br />
-          9000000001 — Admin<br />
-          9000000002 — Employee (Mandal Sub Manager)<br />
-          9000000003 — Member (Ramesh, Standard plan)<br />
-          9000000004 — Retailer, approved<br />
-          9000000005 — Retailer, pending approval<br />
-          9000000006 — Member + Retailer (try the role switcher)
-        </div>
-      )}
     </Screen>
   );
 }

@@ -26,11 +26,11 @@ export default function ComplaintScreen({ navigation }) {
           <>
             <Field label="Category">
               <View style={{ borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: "#fff" }}>
-                <Picker selectedValue={category} onValueChange={setCategory}>
-                  <Picker.Item label="Order Issue" value="Order Issue" />
-                  <Picker.Item label="Retailer Issue" value="Retailer Issue" />
-                  <Picker.Item label="Membership Issue" value="Membership Issue" />
-                  <Picker.Item label="App Issue" value="App Issue" />
+                <Picker style={{ color: T.ink }} selectedValue={category} onValueChange={setCategory}>
+                  <Picker.Item label="Order Issue" value="Order Issue" color={T.ink} />
+                  <Picker.Item label="Retailer Issue" value="Retailer Issue" color={T.ink} />
+                  <Picker.Item label="Membership Issue" value="Membership Issue" color={T.ink} />
+                  <Picker.Item label="App Issue" value="App Issue" color={T.ink} />
                 </Picker>
               </View>
             </Field>

@@ -6,15 +6,6 @@ import { api, getApiUrl, setApiUrl, DEFAULT_API_URL } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { T } from "../theme";
 
-const DEMO_ACCOUNTS = [
-  ["9000000001", "Admin — use the web dashboard for this one"],
-  ["9000000002", "Employee (Mandal Sub Manager)"],
-  ["9000000003", "Member (Ramesh, Standard plan)"],
-  ["9000000004", "Retailer, approved"],
-  ["9000000005", "Retailer, pending approval"],
-  ["9000000006", "Member + Retailer — try the role switcher"],
-];
-
 export default function LoginScreen({ navigation }) {
   const { login } = useAuth();
   const [mode, setMode] = useState("login"); // "login" | "register"
@@ -61,7 +52,7 @@ export default function LoginScreen({ navigation }) {
         </Field>
       )}
       <Field label="Mobile number">
-        <Input keyboardType="number-pad" maxLength={10} placeholder="9000000003 (demo member)" value={phone} onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))} />
+        <Input keyboardType="number-pad" maxLength={10} placeholder="10-digit mobile number" value={phone} onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))} />
       </Field>
       <Field label="Password">
         <Input secureTextEntry placeholder={mode === "register" ? "At least 6 characters" : "••••••••"} value={password} onChangeText={setPassword} />
@@ -84,15 +75,6 @@ export default function LoginScreen({ navigation }) {
           <Text style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 6 }}>
             Expo Go can't reach "localhost" — point this at your computer's LAN IP where the backend is running.
           </Text>
-        </View>
-      )}
-
-      {mode === "login" && (
-        <View style={{ marginTop: 18, backgroundColor: "#fff", borderRadius: 10, borderWidth: 1, borderColor: T.line, padding: 12 }}>
-          <Text style={{ fontSize: 11, fontWeight: "700", color: T.ink, marginBottom: 6 }}>Demo accounts (seeded) — password gvcda123</Text>
-          {DEMO_ACCOUNTS.map(([num, label]) => (
-            <Text key={num} style={{ fontSize: 10.5, color: T.inkSoft, lineHeight: 17 }}>{num} — {label}</Text>
-          ))}
         </View>
       )}
     </Screen>

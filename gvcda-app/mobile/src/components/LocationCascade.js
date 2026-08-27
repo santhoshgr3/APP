@@ -37,23 +37,23 @@ export default function LocationCascade({ value, onChange }) {
     <View>
       <Text style={styles.label}>District</Text>
       <View style={styles.pickerWrap}>
-        <Picker selectedValue={value.district_id ?? ""} onValueChange={(v) => onChange({ ...value, district_id: v })}>
-          <Picker.Item label="Select district" value="" />
-          {districts.map((d) => <Picker.Item key={d.district_id} label={d.name} value={d.district_id} />)}
+        <Picker style={styles.picker} selectedValue={value.district_id ?? ""} onValueChange={(v) => onChange({ ...value, district_id: v })}>
+          <Picker.Item label="Select district" value="" color={T.ink} />
+          {districts.map((d) => <Picker.Item key={d.district_id} label={d.name} value={d.district_id} color={T.ink} />)}
         </Picker>
       </View>
       <Text style={styles.label}>Mandal</Text>
       <View style={styles.pickerWrap}>
-        <Picker selectedValue={value.mandal_id ?? ""} enabled={!!value.district_id} onValueChange={(v) => onChange({ ...value, mandal_id: v })}>
-          <Picker.Item label="Select mandal" value="" />
-          {mandals.map((m) => <Picker.Item key={m.mandal_id} label={m.name} value={m.mandal_id} />)}
+        <Picker style={styles.picker} selectedValue={value.mandal_id ?? ""} enabled={!!value.district_id} onValueChange={(v) => onChange({ ...value, mandal_id: v })}>
+          <Picker.Item label="Select mandal" value="" color={T.ink} />
+          {mandals.map((m) => <Picker.Item key={m.mandal_id} label={m.name} value={m.mandal_id} color={T.ink} />)}
         </Picker>
       </View>
       <Text style={styles.label}>Village / Town</Text>
       <View style={styles.pickerWrap}>
-        <Picker selectedValue={value.village_id ?? ""} enabled={!!value.mandal_id} onValueChange={(v) => onChange({ ...value, village_id: v })}>
-          <Picker.Item label="Select village/town" value="" />
-          {villages.map((v) => <Picker.Item key={v.village_id} label={v.name} value={v.village_id} />)}
+        <Picker style={styles.picker} selectedValue={value.village_id ?? ""} enabled={!!value.mandal_id} onValueChange={(v) => onChange({ ...value, village_id: v })}>
+          <Picker.Item label="Select village/town" value="" color={T.ink} />
+          {villages.map((v) => <Picker.Item key={v.village_id} label={v.name} value={v.village_id} color={T.ink} />)}
         </Picker>
       </View>
     </View>
@@ -63,4 +63,9 @@ export default function LocationCascade({ value, onChange }) {
 const styles = StyleSheet.create({
   label: { fontSize: 11, fontWeight: "700", color: T.inkSoft, marginBottom: 4, marginTop: 8 },
   pickerWrap: { borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: "#fff", overflow: "hidden" },
+  // Without an explicit color, the native Picker on Android follows the
+  // device's system theme for its selected-value text — on a dark-themed
+  // phone this renders white-on-white and is invisible even though a value
+  // is actually selected underneath.
+  picker: { color: T.ink },
 });
