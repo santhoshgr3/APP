@@ -16,6 +16,9 @@ router.get("/broadcasts", async (req, res, next) => {
 router.patch("/profile", async (req, res, next) => {
   try {
     const { full_name, village_id, age, gender, address } = req.body;
+    if (age !== undefined && age !== null && !(Number.isInteger(Number(age)) && age >= 1 && age <= 120)) {
+      return res.status(400).json({ error: "Age must be a whole number between 1 and 120" });
+    }
     await run(
       `UPDATE users SET full_name = COALESCE(?, full_name), village_id = COALESCE(?, village_id),
        age = COALESCE(?, age), gender = COALESCE(?, gender), address = COALESCE(?, address)

@@ -22,6 +22,7 @@ export default function RegistrationScreen({ navigation }) {
   const save = async () => {
     if (!fullName.trim()) { setError("Full name is required"); return; }
     if (!loc.village_id) { setError("Please select District, Mandal and Village/Town"); return; }
+    if (age && !(Number(age) >= 1 && Number(age) <= 120)) { setError("Age must be between 1 and 120"); return; }
     setError(""); setSaving(true);
     try {
       await api.memberProfile({

@@ -1,6 +1,6 @@
 # Privacy Policy — GVCDA App
 
-**Last updated:** [DATE]
+**Last updated:** 25 August 2026
 
 This Privacy Policy describes how the GVCDA app ("we", "us", "the app") collects,
 uses, and protects information from Members, Employees, and Retailers who use it.
