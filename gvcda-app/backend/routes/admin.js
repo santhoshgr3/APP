@@ -213,25 +213,36 @@ router.get("/users", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /admin/users { phone, full_name, designation, territory_district_id, territory_mandal_id, village_id, password }
-// Admin-created employee account. `password` is the temporary login password Admin
-// hands to the new employee — they can change it later via /auth/change-password.
+const USER_PHONE_RE = /^\d{10}$/;
+
+// POST /admin/users { phone, full_name, role, password, designation?, territory_district_id?, territory_mandal_id?, village_id? }
+// Admin-created account for ANY role — Employee, Member, Retailer, or another
+// Admin. `password` is the temporary login password Admin hands to the new
+// user; they can change it later via /auth/change-password. `designation` is
+// required only for role='employee' (territory fields stay optional there
+// too — a District Manager might not have one mandal). For role='retailer',
+// this only creates the login — no business listing exists yet, so the
+// person lands on the same "register your business" form a self-signup
+// retailer would see the first time they log in.
 router.post("/users", async (req, res, next) => {
   try {
-    const { phone, full_name, designation, territory_district_id, territory_mandal_id, village_id, password } = req.body;
-    if (!phone || !full_name || !designation) return res.status(400).json({ error: "phone, full_name and designation required" });
+    const { phone, full_name, role, password, designation, territory_district_id, territory_mandal_id, village_id } = req.body;
+    if (!phone || !USER_PHONE_RE.test(phone)) return res.status(400).json({ error: "Valid 10-digit phone number required" });
+    if (!full_name) return res.status(400).json({ error: "full_name required" });
+    if (!["member", "employee", "retailer", "admin"].includes(role)) return res.status(400).json({ error: "Invalid role" });
+    if (role === "employee" && !designation) return res.status(400).json({ error: "designation required for an employee account" });
     if (!password || password.length < 6) return res.status(400).json({ error: "A temporary password (min 6 characters) is required" });
 
-    let user = await get("SELECT * FROM users WHERE phone = ?", [phone]);
-    if (user) return res.status(409).json({ error: "An account with this phone number already exists" });
+    const existing = await get("SELECT 1 FROM users WHERE phone = ?", [phone]);
+    if (existing) return res.status(409).json({ error: "An account with this phone number already exists" });
 
     const password_hash = await bcrypt.hash(password, 10);
     const result = await run(
       `INSERT INTO users (phone, password_hash, full_name, role, village_id, designation, territory_district_id, territory_mandal_id)
-       VALUES (?, ?, ?, 'employee', ?, ?, ?, ?) RETURNING user_id`,
-      [phone, password_hash, full_name, village_id || null, designation, territory_district_id || null, territory_mandal_id || null]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING user_id`,
+      [phone, password_hash, full_name, role, village_id || null, role === "employee" ? designation : null, territory_district_id || null, territory_mandal_id || null]
     );
-    await run("INSERT INTO user_roles (user_id, role) VALUES (?, 'employee') ON CONFLICT DO NOTHING", [result.lastInsertRowid]);
+    await run("INSERT INTO user_roles (user_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING", [result.lastInsertRowid, role]);
 
     res.json(await get("SELECT * FROM users WHERE user_id = ?", [result.lastInsertRowid]));
   } catch (e) { next(e); }

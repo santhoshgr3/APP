@@ -144,7 +144,7 @@ export const api = {
   broadcasts: () => request("/admin/broadcasts"),
   sendBroadcast: (payload) => request("/admin/broadcasts", { method: "POST", body: payload }),
   adminUsers: () => request("/admin/users"),
-  addEmployee: (payload) => request("/admin/users", { method: "POST", body: payload }),
+  addUser: (payload) => request("/admin/users", { method: "POST", body: payload }),
   paymentRequests: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/admin/payment-requests${qs ? "?" + qs : ""}`);

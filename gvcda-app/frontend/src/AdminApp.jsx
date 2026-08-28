@@ -466,9 +466,9 @@ function UsersTab({ refreshKey, onAction }) {
   return (
     <div>
       <div style={{ marginBottom: 14 }}>
-        <Btn onClick={() => setAdding((a) => !a)}><Plus size={14} /> Add Employee</Btn>
+        <Btn onClick={() => setAdding((a) => !a)}><Plus size={14} /> Add User</Btn>
       </div>
-      {adding && <AddEmployeeForm onDone={() => { setAdding(false); onAction(); }} />}
+      {adding && <AddUserForm onDone={() => { setAdding(false); onAction(); }} />}
       <Table
         columns={["Name", "Phone", "Role", "Designation", "Territory", "Status", "Action"]}
         rows={rows}
@@ -492,7 +492,15 @@ function UsersTab({ refreshKey, onAction }) {
   );
 }
 
-function AddEmployeeForm({ onDone }) {
+const ROLE_LABEL_ADMIN = { member: "Member", employee: "Employee", retailer: "Retailer", admin: "Admin" };
+
+// Admin can create a login for any role, not just Employee. Retailer here
+// only creates the account — the person still fills in their own business
+// details the first time they log into the Retailer app (same "register
+// your business" form a self-signup retailer sees), same as list-retailer
+// via an Employee already works. Member/Admin need no extra fields at all.
+function AddUserForm({ onDone }) {
+  const [role, setRole] = useState("employee");
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -512,7 +520,12 @@ function AddEmployeeForm({ onDone }) {
     if (password.length < 6) { setError("Temporary password must be at least 6 characters"); return; }
     setError(""); setSaving(true);
     try {
-      await api.addEmployee({ phone, full_name: fullName, password, designation, territory_district_id: districtId || null, territory_mandal_id: mandalId || null });
+      await api.addUser({
+        phone, full_name: fullName, role, password,
+        designation: role === "employee" ? designation : undefined,
+        territory_district_id: role === "employee" ? (districtId || null) : undefined,
+        territory_mandal_id: role === "employee" ? (mandalId || null) : undefined,
+      });
       onDone();
     } catch (e) { setError(e.message); }
     setSaving(false);
@@ -522,34 +535,48 @@ function AddEmployeeForm({ onDone }) {
     <Card style={{ maxWidth: 480, marginBottom: 18 }}>
       <ErrorBanner message={error} />
       <Grid cols={2}>
-        <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit number" /></Field>
+        <Field label="Role">
+          <select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
+            {Object.entries(ROLE_LABEL_ADMIN).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+        </Field>
+        <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit number" /></Field>
         <Field label="Full name"><input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
-        <Field label="Temporary password"><input style={inputStyle} type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 6 characters — share with the employee" /></Field>
-        <Field label="Designation">
-          <select style={inputStyle} value={designation} onChange={(e) => setDesignation(e.target.value)}>
-            <option value="district_manager">District Manager</option>
-            <option value="mandal_sub_manager">Mandal Sub Manager</option>
-            <option value="zonal_manager">Zonal Manager</option>
-            <option value="volunteer">Volunteer</option>
-          </select>
-        </Field>
-        <Field label="District">
-          <select style={inputStyle} value={districtId} onChange={(e) => setDistrictId(e.target.value)}>
-            <option value="">Select</option>
-            {districts.map((d) => <option key={d.district_id} value={d.district_id}>{d.name}</option>)}
-          </select>
-        </Field>
-        {designation === "mandal_sub_manager" && (
-          <Field label="Mandal">
-            <select style={inputStyle} value={mandalId} onChange={(e) => setMandalId(e.target.value)} disabled={!districtId}>
-              <option value="">Select</option>
-              {mandals.map((m) => <option key={m.mandal_id} value={m.mandal_id}>{m.name}</option>)}
-            </select>
-          </Field>
+        <Field label="Temporary password"><input style={inputStyle} type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 6 characters — share with them" /></Field>
+        {role === "employee" && (
+          <>
+            <Field label="Designation">
+              <select style={inputStyle} value={designation} onChange={(e) => setDesignation(e.target.value)}>
+                <option value="district_manager">District Manager</option>
+                <option value="mandal_sub_manager">Mandal Sub Manager</option>
+                <option value="zonal_manager">Zonal Manager</option>
+                <option value="volunteer">Volunteer</option>
+              </select>
+            </Field>
+            <Field label="District">
+              <select style={inputStyle} value={districtId} onChange={(e) => setDistrictId(e.target.value)}>
+                <option value="">Select</option>
+                {districts.map((d) => <option key={d.district_id} value={d.district_id}>{d.name}</option>)}
+              </select>
+            </Field>
+            {designation === "mandal_sub_manager" && (
+              <Field label="Mandal">
+                <select style={inputStyle} value={mandalId} onChange={(e) => setMandalId(e.target.value)} disabled={!districtId}>
+                  <option value="">Select</option>
+                  {mandals.map((m) => <option key={m.mandal_id} value={m.mandal_id}>{m.name}</option>)}
+                </select>
+              </Field>
+            )}
+          </>
+        )}
+        {role === "retailer" && (
+          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: T.inkSoft }}>
+            This only creates the login — they'll fill in their business details themselves the first time they log in.
+          </div>
         )}
       </Grid>
       <div style={{ marginTop: 10 }}>
-        <Btn onClick={submit} disabled={saving}>{saving ? "Saving..." : "Create Employee Account"}</Btn>
+        <Btn onClick={submit} disabled={saving}>{saving ? "Saving..." : `Create ${ROLE_LABEL_ADMIN[role]} Account`}</Btn>
       </div>
     </Card>
   );
