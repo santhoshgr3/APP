@@ -12,6 +12,7 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showServer, setShowServer] = useState(false);
@@ -24,7 +25,7 @@ export default function LoginScreen({ navigation }) {
   const submit = async () => {
     setError(""); setLoading(true);
     try {
-      const res = mode === "login" ? await api.login(phone, password) : await api.register(phone, password, fullName);
+      const res = mode === "login" ? await api.login(phone, password) : await api.register(phone, password, fullName, referralCode.trim() || undefined);
       await login(res.token, res.user, res.roles);
       if (res.is_new_user) {
         navigation.replace("Registration");
@@ -47,9 +48,14 @@ export default function LoginScreen({ navigation }) {
       <ErrorBanner message={error} />
 
       {mode === "register" && (
-        <Field label="Full name">
-          <Input value={fullName} onChangeText={setFullName} placeholder="Your name" />
-        </Field>
+        <>
+          <Field label="Full name">
+            <Input value={fullName} onChangeText={setFullName} placeholder="Your name" />
+          </Field>
+          <Field label="Referral code (optional)">
+            <Input value={referralCode} onChangeText={(v) => setReferralCode(v.toUpperCase())} placeholder="e.g. 4ABA41" autoCapitalize="characters" />
+          </Field>
+        </>
       )}
       <Field label="Mobile number">
         <Input keyboardType="number-pad" maxLength={10} placeholder="10-digit mobile number" value={phone} onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))} />

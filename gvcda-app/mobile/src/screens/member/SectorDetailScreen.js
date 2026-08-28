@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Text } from "react-native";
-import { TopBar, Screen, Card, LoadingScreen, EmptyState } from "../../components/ui";
+import { TopBar, Screen, Card, Input, LoadingScreen, EmptyState } from "../../components/ui";
 import RetailerThumb from "../../components/RetailerThumb";
 import { api } from "../../api";
 import { T } from "../../theme";
@@ -12,15 +12,22 @@ import { T } from "../../theme";
 export default function SectorDetailScreen({ navigation, route }) {
   const { id, name } = route.params;
   const [list, setList] = useState(null);
+  const [q, setQ] = useState("");
 
-  useEffect(() => { api.memberRetailers({ category_id: id }).then(setList); }, [id]);
+  useEffect(() => {
+    const params = { category_id: id };
+    if (q.trim()) params.q = q.trim();
+    const t = setTimeout(() => api.memberRetailers(params).then(setList), 250);
+    return () => clearTimeout(t);
+  }, [id, q]);
 
   return (
     <View style={{ flex: 1, backgroundColor: T.cream }}>
       <TopBar title={name} subtitle="Your Mandal & nearby" onBack={() => navigation.goBack()} />
       {!list ? <LoadingScreen /> : (
         <Screen>
-          {list.length === 0 && <EmptyState icon="search" text={`No ${name} retailers listed in your Mandal yet.`} />}
+          <Input placeholder="Search retailers..." value={q} onChangeText={setQ} style={{ marginBottom: 12 }} />
+          {list.length === 0 && <EmptyState icon="search" text={q ? `No results for "${q}".` : `No ${name} retailers listed in your Mandal yet.`} />}
           {list.map((r) => (
             <Card key={r.retailer_id} onPress={() => navigation.navigate("RetailerProfile", { id: r.retailer_id })} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>

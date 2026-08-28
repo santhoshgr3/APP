@@ -101,11 +101,13 @@ export function photoUrl(filename) {
 
 export const api = {
   // auth
-  register: (phone, password, full_name) => request("/auth/register", { method: "POST", body: { phone, password, full_name }, auth: false }),
+  register: (phone, password, full_name, referral_code) =>
+    request("/auth/register", { method: "POST", body: { phone, password, full_name, referral_code }, auth: false }),
   login: (phone, password) => request("/auth/login", { method: "POST", body: { phone, password }, auth: false }),
   me: () => request("/auth/me"),
   switchRole: (role) => request("/auth/switch-role", { method: "POST", body: { role } }),
   changePassword: (current_password, new_password) => request("/auth/change-password", { method: "POST", body: { current_password, new_password } }),
+  registerPushToken: (token) => request("/auth/push-token", { method: "POST", body: { token } }),
 
   // locations
   districts: () => request("/locations/districts", { auth: false }),
@@ -130,6 +132,9 @@ export const api = {
     request("/member/orders", { method: "POST", body: { retailer_id, items, delivery_address, delivery_phone } }),
   memberOrders: () => request("/member/orders"),
   memberOrderDetail: (id) => request(`/member/orders/${id}`),
+  cancelOrder: (id) => request(`/member/orders/${id}/cancel`, { method: "PATCH" }),
+  submitReview: (order_id, rating, comment) => request(`/member/orders/${order_id}/review`, { method: "POST", body: { rating, comment } }),
+  memberReferrals: () => request("/member/referrals"),
   memberJobs: () => request("/member/jobs"),
   applyJob: (id) => request(`/member/jobs/${id}/apply`, { method: "POST" }),
   raiseComplaint: (category, description, against_retailer_id) =>
@@ -159,6 +164,8 @@ export const api = {
   retailerOrderDetail: (id) => request(`/retailer/orders/${id}`),
   updateOrderStatus: (id, status) => request(`/retailer/orders/${id}`, { method: "PATCH", body: { status } }),
   retailerEarnings: () => request("/retailer/earnings"),
+  retailerEarningsTrend: (days = 14) => request(`/retailer/earnings/trend?days=${days}`),
+  retailerReviews: () => request("/retailer/reviews"),
   commissionCheckout: () => request("/retailer/commission/checkout", { method: "POST" }),
   submitCommissionUtr: (request_id, utr) => request("/retailer/commission/submit-utr", { method: "POST", body: { request_id, utr } }),
   commissionRequests: () => request("/retailer/commission/requests"),

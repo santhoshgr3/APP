@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Screen, Card, Btn, LoadingScreen, ChangePasswordCard } from "../../components/ui";
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
@@ -10,8 +11,17 @@ import { T } from "../../theme";
 export default function ProfileScreen({ navigation }) {
   const { session, logout } = useAuth();
   const [membership, setMembership] = useState(undefined);
+  const [referrals, setReferrals] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => { api.memberMembership().then((r) => setMembership(r.membership)); }, []);
+  useEffect(() => { api.memberReferrals().then(setReferrals); }, []);
+
+  const copyReferral = async () => {
+    await Clipboard.setStringAsync(referrals.referral_code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   if (!session) return null; // mid-logout — navigation is about to swap to Login
   const { user } = session;
@@ -47,6 +57,18 @@ export default function ProfileScreen({ navigation }) {
         </Card>
       )}
 
+      {referrals && (
+        <Card style={{ marginBottom: 12 }}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: T.inkSoft, marginBottom: 4 }}>INVITE FRIENDS</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: T.teal, letterSpacing: 1 }}>{referrals.referral_code}</Text>
+            <Btn variant="secondary" onPress={copyReferral}>{copied ? "Copied!" : "Copy Code"}</Btn>
+          </View>
+          <Text style={{ fontSize: 11, color: T.inkSoft, marginTop: 6 }}>
+            Share this code — {referrals.referred_count} friend{referrals.referred_count === 1 ? "" : "s"} joined using it so far.
+          </Text>
+        </Card>
+      )}
       <Btn full variant="ghost" icon="credit-card" style={{ marginBottom: 8 }} onPress={() => navigation.navigate("DigitalCard")}>
         Digital membership card
       </Btn>

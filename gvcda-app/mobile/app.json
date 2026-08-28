@@ -39,6 +39,13 @@
           "photosPermission": "GVCDA uses your photos to add storefront and product images.",
           "cameraPermission": "GVCDA uses your camera to take storefront and product photos."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0E5E5C"
+        }
       ]
     ],
     "extra": {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Image, ScrollView, Alert } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { TopBar, Screen, Card, Btn, LoadingScreen, EmptyState, Chip } from "../../components/ui";
 import { api, photoUrl } from "../../api";
 import { useCart } from "../../context/CartContext";
@@ -45,6 +46,11 @@ export default function RetailerProfileScreen({ navigation, route }) {
     <View style={{ flex: 1, backgroundColor: T.cream }}>
       <TopBar title={retailer.business_name} subtitle={`${retailer.village_name} • ${retailer.category_name}`} onBack={() => navigation.goBack()} />
       <Screen>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 12 }}>
+          <Feather name="star" size={14} color={T.gold} />
+          <Text style={{ fontSize: 13, fontWeight: "700", color: T.gold }}>{retailer.rating_avg || "New"}</Text>
+          <Text style={{ fontSize: 11, color: T.inkSoft }}>({data.reviews?.length || 0} review{data.reviews?.length === 1 ? "" : "s"})</Text>
+        </View>
         {photos?.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
             {photos.map((p) => (
@@ -83,6 +89,20 @@ export default function RetailerProfileScreen({ navigation, route }) {
             <Btn variant="secondary" icon="plus" onPress={() => handleAdd({ ...p, retailer_id: retailer.retailer_id })}>Add</Btn>
           </Card>
         ))}
+        {data.reviews?.length > 0 && (
+          <>
+            <Text style={{ fontSize: 12, fontWeight: "700", marginTop: 16, marginBottom: 8 }}>Reviews</Text>
+            {data.reviews.map((r, i) => (
+              <Card key={i} style={{ marginBottom: 8 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <Text style={{ fontSize: 12, fontWeight: "700" }}>{r.member_name}</Text>
+                  <Text style={{ fontSize: 11, color: T.gold }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</Text>
+                </View>
+                {r.comment ? <Text style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 4 }}>{r.comment}</Text> : null}
+              </Card>
+            ))}
+          </>
+        )}
       </Screen>
       {count > 0 && (
         <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: T.line, backgroundColor: "#fff" }}>

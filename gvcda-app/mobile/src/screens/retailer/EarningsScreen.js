@@ -13,6 +13,8 @@ import { T } from "../../theme";
 export default function EarningsScreen() {
   const [earnings, setEarnings] = useState(null);
   const [history, setHistory] = useState(null);
+  const [trend, setTrend] = useState(null);
+  const [reviews, setReviews] = useState(null);
   const [checkout, setCheckout] = useState(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
@@ -20,6 +22,8 @@ export default function EarningsScreen() {
   const load = useCallback(() => {
     api.retailerEarnings().then(setEarnings);
     api.commissionRequests().then(setHistory);
+    api.retailerEarningsTrend(14).then(setTrend);
+    api.retailerReviews().then(setReviews);
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -54,6 +58,18 @@ export default function EarningsScreen() {
         <Text style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 6 }}>{earnings.order_count} fulfilled order(s) to date.</Text>
       </Card>
 
+      {trend && (
+        <Card style={{ marginBottom: 14 }}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: T.inkSoft, marginBottom: 10 }}>SALES — LAST 14 DAYS</Text>
+          <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 3, height: 60 }}>
+            {trend.map((d) => {
+              const max = Math.max(...trend.map((x) => x.gross), 1);
+              return <View key={d.day} style={{ flex: 1, height: `${Math.max(4, (d.gross / max) * 100)}%`, backgroundColor: d.gross > 0 ? T.teal : T.line, borderRadius: 2 }} />;
+            })}
+          </View>
+        </Card>
+      )}
+
       <Card style={{ marginBottom: 14, backgroundColor: earnings.commission_owed > 0 ? T.terracottaLight : "#fff" }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <View>
@@ -78,6 +94,21 @@ export default function EarningsScreen() {
             <Chip tone={h.status === "verified" ? "teal" : h.status === "rejected" ? "red" : "gold"}>{h.status}</Chip>
           </Card>
         ))
+      )}
+
+      {reviews && reviews.length > 0 && (
+        <>
+          <Text style={{ fontSize: 13, fontWeight: "700", marginTop: 16, marginBottom: 10 }}>Customer Reviews</Text>
+          {reviews.map((r, i) => (
+            <Card key={i} style={{ marginBottom: 8 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 12, fontWeight: "700" }}>{r.member_name}</Text>
+                <Text style={{ fontSize: 11, color: T.gold }}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</Text>
+              </View>
+              {r.comment ? <Text style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 4 }}>{r.comment}</Text> : null}
+            </Card>
+          ))}
+        </>
       )}
     </Screen>
   );

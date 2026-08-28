@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { api, getSession, saveSession, clearSession, setUnauthorizedHandler } from "../api";
 import { resetToLogin } from "../navigation/navigationRef";
+import { registerForPushNotifications } from "../notifications";
 
 const AuthContext = createContext(null);
 
@@ -10,7 +11,14 @@ export function AuthProvider({ children }) {
   const hadSession = useRef(false);
 
   useEffect(() => {
-    getSession().then((s) => { setSession(s); hadSession.current = !!s; setBooting(false); });
+    getSession().then((s) => {
+      setSession(s);
+      hadSession.current = !!s;
+      setBooting(false);
+      // Re-register on every cold start too, not just fresh logins — the OS
+      // can rotate a device's push token at any time.
+      if (s) registerForPushNotifications();
+    });
   }, []);
 
   const logout = useCallback(async () => {
@@ -34,6 +42,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (token, user, roles) => {
     await saveSession(token, user, roles);
     setSession({ token, user, roles: roles || [user.role] });
+    registerForPushNotifications();
   }, []);
 
   const switchRole = useCallback(async (role) => {

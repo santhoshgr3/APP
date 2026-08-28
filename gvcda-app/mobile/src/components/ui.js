@@ -107,8 +107,12 @@ export function Field({ label, children }) {
   );
 }
 
-export function Input(props) {
-  return <TextInput placeholderTextColor="#9AA39D" style={[styles.input, props.style]} {...props} />;
+export function Input({ style, ...props }) {
+  // Destructure style out of props before spreading — {...props} after an
+  // explicit style prop would otherwise win and silently discard the merged
+  // base styling (border, padding, background) whenever a caller passes their
+  // own style, which is exactly the case ComplaintScreen's textarea hit.
+  return <TextInput placeholderTextColor="#9AA39D" style={[styles.input, style]} {...props} />;
 }
 
 export function ErrorBanner({ message }) {
