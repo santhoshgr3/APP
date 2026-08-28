@@ -99,10 +99,11 @@ router.get("/home", async (req, res, next) => {
     let nearby = [];
     if (user.village_id) {
       nearby = await all(
-        `SELECT r.*, v.name as village_name,
+        `SELECT r.*, v.name as village_name, c.name as category_name,
                 (SELECT filename FROM retailer_photos WHERE retailer_id = r.retailer_id ORDER BY is_primary DESC, created_at LIMIT 1) as primary_photo
          FROM retailers r
          JOIN villages v ON v.village_id = r.village_id
+         JOIN retailer_categories c ON c.category_id = r.category_id
          WHERE r.village_id = ? AND r.status = 'approved' LIMIT 5`,
         [user.village_id]
       );

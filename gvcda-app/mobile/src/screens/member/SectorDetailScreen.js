@@ -31,7 +31,7 @@ export default function SectorDetailScreen({ navigation, route }) {
           {list.map((r) => (
             <Card key={r.retailer_id} onPress={() => navigation.navigate("RetailerProfile", { id: r.retailer_id })} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <RetailerThumb photo={r.primary_photo} />
+                <RetailerThumb photo={r.primary_photo} category={name} />
                 <View>
                   <Text style={{ fontSize: 12.5, fontWeight: "700" }}>{r.business_name}</Text>
                   <Text style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</Text>

@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from "react";
 import {
   Home, Search, ClipboardList, Briefcase, User, MapPin, QrCode, Star, Plus, Minus,
-  ShoppingCart, CheckCircle2, Clock, AlertCircle, Settings, LogOut, Send, Truck, Store
+  ShoppingCart, CheckCircle2, Clock, AlertCircle, Settings, LogOut, Send, Truck, Store,
+  Leaf, GraduationCap, Zap, Users, ShoppingBasket, HeartPulse, Wrench,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api, clearSession, saveSession, getSession, photoUrl } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ErrorBanner, ChangePasswordCard, AnnouncementsCard, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ErrorBanner, ChangePasswordCard, AnnouncementsCard, categoryStyle, T } from "./ui";
+
+// Maps categoryStyle()'s icon-name strings (kept in ui.jsx, icon-library-agnostic)
+// to the actual lucide-react components used here.
+const CATEGORY_ICONS = { Leaf, Briefcase, GraduationCap, Zap, Users, ShoppingBasket, HeartPulse, Wrench, Store };
 import BankTransferQR from "./BankTransferQR";
 import LocationCascade from "./LocationCascade";
 
@@ -65,10 +70,12 @@ export function CompleteMemberProfile({ user, onDone }) {
   );
 }
 
-function RetailerThumb({ photo, size = 44 }) {
+function RetailerThumb({ photo, category, size = 44 }) {
+  const { color, icon } = categoryStyle(category);
+  const Icon = CATEGORY_ICONS[icon];
   return (
-    <div style={{ width: size, height: size, borderRadius: 10, background: T.tealLight, flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      {photo ? <img src={photoUrl(photo)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Store size={size * 0.4} color={T.teal} />}
+    <div style={{ width: size, height: size, borderRadius: 10, background: T[`${color}Light`], flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {photo ? <img src={photoUrl(photo)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Icon size={size * 0.4} color={T[color]} />}
     </div>
   );
 }
@@ -151,22 +158,29 @@ function HomeTab({ push, user }) {
 
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Explore Sectors</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 18 }}>
-        {data.categories.map((c) => (
-          <div key={c.category_id} onClick={() => push("sector", { id: c.category_id, name: c.name })}
-            style={{ background: "#fff", borderRadius: 12, padding: "12px 6px", textAlign: "center", border: `1px solid ${T.line}`, cursor: "pointer" }}>
-            <div style={{ fontSize: 10, fontWeight: 700 }}>{c.name}</div>
-          </div>
-        ))}
+        {data.categories.map((c) => {
+          const { color, icon } = categoryStyle(c.name);
+          const Icon = CATEGORY_ICONS[icon];
+          return (
+            <div key={c.category_id} onClick={() => push("sector", { id: c.category_id, name: c.name })}
+              style={{ background: "#fff", borderRadius: 12, padding: "14px 6px 10px", textAlign: "center", border: `1px solid ${T.line}`, cursor: "pointer" }}>
+              <div style={{ width: 34, height: 34, borderRadius: "50%", background: T[`${color}Light`], display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 6px" }}>
+                <Icon size={16} color={T[color]} />
+              </div>
+              <div style={{ fontSize: 10, fontWeight: 700 }}>{c.name}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Nearby Retailers</div>
       {data.nearby.length === 0 && <EmptyState icon={Search} text="No approved retailers in your village yet." />}
       {data.nearby.map((r) => (
         <Card key={r.retailer_id} onClick={() => push("retailer", { id: r.retailer_id })} style={{ marginBottom: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
-          <RetailerThumb photo={r.primary_photo} />
+          <RetailerThumb photo={r.primary_photo} category={r.category_name} />
           <div>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{r.business_name}</div>
-            <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name}</div>
+            <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name} • {r.category_name}</div>
           </div>
         </Card>
       ))}
@@ -196,7 +210,7 @@ function SectorDetail({ categoryId, categoryName, onBack, onOpenRetailer }) {
         {list.map((r) => (
           <Card key={r.retailer_id} onClick={() => onOpenRetailer(r.retailer_id)} style={{ marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <RetailerThumb photo={r.primary_photo} />
+              <RetailerThumb photo={r.primary_photo} category={categoryName} />
               <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{r.business_name}</div><div style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</div></div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: T.gold }}><Star size={12} fill={T.gold} color={T.gold} />{r.rating_avg || "New"}</div>

@@ -7,8 +7,28 @@ export const T = {
   terracotta: "#C1652F", terracottaLight: "#F7E7DB",
   gold: "#D4A017", goldLight: "#FBF1DA",
   red: "#B23A48", redLight: "#F7E4E6",
+  green: "#4C7A3D", greenLight: "#E9F1E5",
+  blue: "#2E6B8A", blueLight: "#E5EFF3",
+  purple: "#7A4C87", purpleLight: "#F1E7F3",
   cream: "#FBF7F0", ink: "#1E2523", inkSoft: "#5B655F", line: "#E7E0D3",
 };
+
+// Retailer sector categories are seeded fixed (backend/db.js) — give each a
+// distinct color + icon so browsing isn't a grid of identical white boxes.
+// An unlisted category (an Admin could add one later) falls back to teal.
+export const CATEGORY_STYLE = {
+  Agriculture: { color: "green", icon: "Leaf" },
+  Business: { color: "blue", icon: "Briefcase" },
+  Education: { color: "purple", icon: "GraduationCap" },
+  Electronics: { color: "gold", icon: "Zap" },
+  Employment: { color: "teal", icon: "Users" },
+  Grocery: { color: "terracotta", icon: "ShoppingBasket" },
+  Health: { color: "red", icon: "HeartPulse" },
+  Services: { color: "blue", icon: "Wrench" },
+};
+export function categoryStyle(name) {
+  return CATEGORY_STYLE[name] || { color: "teal", icon: "Store" };
+}
 
 export function TopBar({ title, subtitle, onBack, right }) {
   return (

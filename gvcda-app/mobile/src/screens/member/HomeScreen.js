@@ -5,7 +5,7 @@ import { Screen, Card, LoadingScreen, EmptyState, AnnouncementsCard } from "../.
 import RetailerThumb from "../../components/RetailerThumb";
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
-import { T } from "../../theme";
+import { T, categoryStyle } from "../../theme";
 
 // Screen Spec 1.6 — main landing screen, auto-filtered to the member's own village.
 export default function HomeScreen({ navigation }) {
@@ -71,25 +71,31 @@ export default function HomeScreen({ navigation }) {
 
             <Text style={{ fontSize: 13, fontWeight: "700", marginBottom: 10 }}>Explore Sectors</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-              {data.categories.map((c) => (
-                <TouchableOpacity
-                  key={c.category_id}
-                  onPress={() => navigation.navigate("SectorDetail", { id: c.category_id, name: c.name })}
-                  style={{ width: "22%", backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: T.line, paddingVertical: 12, alignItems: "center" }}
-                >
-                  <Text style={{ fontSize: 10, fontWeight: "700", textAlign: "center" }}>{c.name}</Text>
-                </TouchableOpacity>
-              ))}
+              {data.categories.map((c) => {
+                const { color, icon } = categoryStyle(c.name);
+                return (
+                  <TouchableOpacity
+                    key={c.category_id}
+                    onPress={() => navigation.navigate("SectorDetail", { id: c.category_id, name: c.name })}
+                    style={{ width: "22%", backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: T.line, paddingVertical: 14, alignItems: "center" }}
+                  >
+                    <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: T[`${color}Light`], alignItems: "center", justifyContent: "center", marginBottom: 6 }}>
+                      <Feather name={icon} size={16} color={T[color]} />
+                    </View>
+                    <Text style={{ fontSize: 10, fontWeight: "700", textAlign: "center" }}>{c.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <Text style={{ fontSize: 13, fontWeight: "700", marginBottom: 10 }}>Nearby Retailers</Text>
             {data.nearby.length === 0 && <EmptyState icon="search" text="No approved retailers in your village yet." />}
             {data.nearby.map((r) => (
               <Card key={r.retailer_id} onPress={() => navigation.navigate("RetailerProfile", { id: r.retailer_id })} style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <RetailerThumb photo={r.primary_photo} />
+                <RetailerThumb photo={r.primary_photo} category={r.category_name} />
                 <View>
                   <Text style={{ fontSize: 13, fontWeight: "700" }}>{r.business_name}</Text>
-                  <Text style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name}</Text>
+                  <Text style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name} • {r.category_name}</Text>
                 </View>
               </Card>
             ))}
