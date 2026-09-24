@@ -29,7 +29,7 @@ export default function RetailerHomeScreen({ navigation }) {
 
       <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
         <Card style={{ flex: 1 }}>
-          <Text style={{ fontSize: 10.5, color: T.inkSoft, fontWeight: "700" }}>CASH COLLECTED (COD)</Text>
+          <Text style={{ fontSize: 10.5, color: T.inkSoft, fontWeight: "700" }}>SALES COLLECTED</Text>
           <Text style={{ fontSize: 18, fontWeight: "800", marginTop: 4 }}>₹{earnings.gross}</Text>
         </Card>
         <Card style={{ flex: 1 }}>

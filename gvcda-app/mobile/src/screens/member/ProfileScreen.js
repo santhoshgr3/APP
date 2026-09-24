@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Linking, Alert } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Screen, Card, Btn, LoadingScreen, ChangePasswordCard } from "../../components/ui";
 import { api } from "../../api";
@@ -85,8 +85,8 @@ export default function ProfileScreen({ navigation }) {
           Register your business (become a Retailer)
         </Btn>
       )}
-      <Btn full variant="ghost" icon="phone" style={{ marginBottom: 8 }} onPress={() => {}}>
-        Helpline: 1800-000-0000
+      <Btn full variant="ghost" icon="mail" style={{ marginBottom: 8 }} onPress={() => Linking.openURL("mailto:info@gvcdaservicehub.com").catch(() => Alert.alert("Email us", "info@gvcdaservicehub.com"))}>
+        Email support: info@gvcdaservicehub.com
       </Btn>
       <ChangePasswordCard style={{ marginBottom: 16 }} />
       <Btn full variant="danger" icon="log-out" onPress={logout}>Log out</Btn>

@@ -95,7 +95,7 @@ export default function OrderTrackingScreen({ navigation, route }) {
           <Text style={{ fontSize: 11, fontWeight: "700", color: T.teal, marginBottom: 4 }}>{isPickup ? "PICK UP AT" : "DELIVER TO"}</Text>
           <Text style={{ fontSize: 13, fontWeight: "700" }}>{isPickup ? order.business_name || "Pickup at store" : order.delivery_address || "No address provided"}</Text>
           {order.retailer_phone ? (
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.retailer_phone}`)} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.retailer_phone}`).catch(() => {})} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
               <Feather name="phone" size={12} color={T.teal} />
               <Text style={{ fontSize: 12, color: T.teal, fontWeight: "700" }}>Call shop: {order.retailer_phone}</Text>
             </TouchableOpacity>

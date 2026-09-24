@@ -69,7 +69,8 @@ async function requestUpload(path, fieldName, assets) {
   const token = await getToken();
   const form = new FormData();
   assets.forEach((asset, i) => {
-    const ext = asset.uri.split(".").pop().split("?")[0].toLowerCase();
+    const rawExt = asset.uri.split("?")[0].split(".").pop().toLowerCase();
+    const ext = ["jpg", "jpeg", "png", "webp"].includes(rawExt) ? rawExt : "jpg";
     const type = asset.mimeType || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg");
     form.append(fieldName, { uri: asset.uri, name: `photo-${i}.${ext === "jpg" ? "jpg" : ext}`, type });
   });

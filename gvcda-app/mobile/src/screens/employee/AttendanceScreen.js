@@ -46,7 +46,10 @@ export default function AttendanceScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return {};
-      const pos = await Location.getCurrentPositionAsync({});
+      const pos = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("gps timeout")), 8000)),
+      ]);
       return { lat: pos.coords.latitude, lng: pos.coords.longitude };
     } catch (e) { return {}; }
   };

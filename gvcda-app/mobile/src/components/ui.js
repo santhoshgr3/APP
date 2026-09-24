@@ -26,7 +26,7 @@ export function TopBar({ title, subtitle, onBack, right }) {
 export function Screen({ children, style, scroll = true }) {
   if (!scroll) return <View style={[{ flex: 1, padding: 16 }, style]}>{children}</View>;
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={[{ padding: 16 }, style]}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={[{ padding: 16 }, style]} keyboardShouldPersistTaps="handled">
       {children}
     </ScrollView>
   );
@@ -72,7 +72,7 @@ export function Btn({ children, onPress, variant = "primary", full, style, disab
       style={[
         styles.btn,
         VARIANT_STYLES[variant],
-        full && { width: "100%" },
+        full && { width: "100%", flexShrink: 1 },
         disabled && { opacity: 0.5 },
         style,
       ]}

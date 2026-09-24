@@ -70,7 +70,7 @@ export default function CartScreen({ navigation }) {
       );
       clearCart();
       if (paymentMethod === "upi" && res.order?.order_id) navigation.replace("OrderTracking", { id: res.order.order_id });
-      else navigation.navigate("Main");
+      else navigation.popTo("Main");
     } catch (e) { setError(e.message); }
     setPlacing(false);
   };

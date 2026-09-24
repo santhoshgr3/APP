@@ -1,5 +1,8 @@
 require("dotenv").config();
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
+// DATE columns (attendance, leave, tasks, salary) come back as plain "YYYY-MM-DD" strings, not JS Dates
+// that would serialise through UTC and can shift the calendar day depending on the server timezone.
+types.setTypeParser(1082, (v) => v);
 const bcrypt = require("bcryptjs");
 
 if (!process.env.DATABASE_URL) {

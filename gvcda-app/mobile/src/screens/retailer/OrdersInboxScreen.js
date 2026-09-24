@@ -11,6 +11,7 @@ const TABS = [
   ["accepted", "Accepted"],
   ["fulfilled", "Fulfilled"],
   ["rejected", "Rejected"],
+  ["cancelled", "Cancelled"],
 ];
 
 // Screen Spec 3.4 — where retailers action incoming demand.

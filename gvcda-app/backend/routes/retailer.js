@@ -233,10 +233,14 @@ router.get("/reports", withRetailer, async (req, res, next) => {
       `SELECT COALESCE(SUM(o.order_total) FILTER (WHERE o.payment_method = 'cod'),0) as cod_total,
               COALESCE(SUM(o.order_total) FILTER (WHERE o.payment_method = 'upi'),0) as upi_total,
               COALESCE(SUM(o.commission_amt) FILTER (WHERE o.commission_settled = 0),0) as commission_owed,
-              COALESCE(SUM(o.commission_amt) FILTER (WHERE o.commission_settled = 1),0) as commission_settled,
-              COUNT(*) FILTER (WHERE o.payment_method = 'upi' AND o.payment_status = 'submitted' AND o.status NOT IN ('cancelled','rejected')) as upi_awaiting_confirmation
+              COALESCE(SUM(o.commission_amt) FILTER (WHERE o.commission_settled = 1),0) as commission_settled
        FROM orders o WHERE ${range} AND o.status = 'fulfilled'`, [rid, from, to]
     );
+    // Open UPI orders can't be fulfilled until paid, so "awaiting confirmation" has to be counted across all open orders.
+    payments.upi_awaiting_confirmation = Number((await get(
+      `SELECT COUNT(*) c FROM orders o WHERE ${range} AND o.payment_method = 'upi' AND o.payment_status = 'submitted' AND o.status NOT IN ('cancelled','rejected')`,
+      [rid, from, to]
+    )).c);
 
     const stockRows = await all("SELECT product_id, name, stock FROM products WHERE retailer_id = ? AND stock IS NOT NULL AND item_type = 'product' ORDER BY stock, name", [rid]);
     const stock = {

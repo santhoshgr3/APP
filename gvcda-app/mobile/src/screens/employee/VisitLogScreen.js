@@ -36,7 +36,10 @@ export default function VisitLogScreen() {
       let lat = null, lng = null;
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === "granted") {
-        const pos = await Location.getCurrentPositionAsync({});
+        const pos = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("gps timeout")), 8000)),
+        ]);
         lat = pos.coords.latitude; lng = pos.coords.longitude;
         setCoords({ lat, lng });
       } else {

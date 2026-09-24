@@ -30,7 +30,7 @@ export default function CustomerDetailScreen({ navigation, route }) {
           <Card style={{ marginBottom: 14 }}>
             <Text style={{ fontSize: 14, fontWeight: "700" }}>{c.full_name}</Text>
             {c.phone ? (
-              <TouchableOpacity onPress={() => Linking.openURL(`tel:${c.phone}`)} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
+              <TouchableOpacity onPress={() => Linking.openURL(`tel:${c.phone}`).catch(() => {})} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
                 <Feather name="phone" size={13} color={T.teal} />
                 <Text style={{ fontSize: 12.5, color: T.teal, fontWeight: "700" }}>{c.phone}</Text>
               </TouchableOpacity>

@@ -60,7 +60,7 @@ export default function OrderDetailScreen({ navigation, route }) {
           <Text style={{ fontSize: 11, fontWeight: "700", color: T.inkSoft, marginBottom: 4 }}>CUSTOMER</Text>
           <Text style={{ fontSize: 13, fontWeight: "700" }}>{order.member_name}</Text>
           {order.member_phone ? (
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.member_phone}`)} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.member_phone}`).catch(() => {})} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
               <Feather name="phone" size={13} color={T.teal} />
               <Text style={{ fontSize: 12.5, color: T.teal, fontWeight: "700" }}>{order.member_phone}</Text>
             </TouchableOpacity>
@@ -71,7 +71,7 @@ export default function OrderDetailScreen({ navigation, route }) {
           <Text style={{ fontSize: 11, fontWeight: "700", color: T.teal, marginBottom: 4 }}>{isPickup ? "CUSTOMER PICKS UP" : "DELIVER TO"}</Text>
           <Text style={{ fontSize: 13, fontWeight: "700" }}>{isPickup ? "Pickup at store" : order.delivery_address || "No address provided"}</Text>
           {order.delivery_phone ? (
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.delivery_phone}`)} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.delivery_phone}`).catch(() => {})} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 }}>
               <Feather name="phone-call" size={12} color={T.teal} />
               <Text style={{ fontSize: 12, color: T.teal, fontWeight: "700" }}>Contact: {order.delivery_phone}</Text>
             </TouchableOpacity>

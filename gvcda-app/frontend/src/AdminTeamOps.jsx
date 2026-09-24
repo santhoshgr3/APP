@@ -246,7 +246,7 @@ function SalaryBoard({ refreshKey }) {
         )}
       </Loaded>
 
-      {payFor && <RecordPayment employee={payFor} onClose={() => setPayFor(null)} onDone={() => { setPayFor(null); setHistKey((k) => k + 1); }} />}
+      {payFor && <RecordPayment employee={payFor} onClose={() => setPayFor(null)} onDone={(m) => { setPayFor(null); if (m) setHistMonth(m); setHistKey((k) => k + 1); }} />}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0 10px" }}>
         <div style={{ fontSize: 14, fontWeight: 700 }}>Payment history</div>
@@ -347,7 +347,7 @@ function RecordPayment({ employee, onClose, onDone }) {
         base_amount: Number(form.base_amount), incentive_amount: Number(form.incentive_amount), deductions: Number(form.deductions),
         reference: form.reference.trim() || undefined, notes: form.notes.trim() || undefined, paid_on: form.paid_on || undefined,
       });
-      onDone();
+      onDone(month);
     } catch (e) { setError(e.message); }
     setBusy(false);
   };

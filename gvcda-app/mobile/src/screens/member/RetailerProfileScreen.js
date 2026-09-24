@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Image, ScrollView, Alert } from "react-native";
+import { fmtDate } from "../../utils";
 import { Feather } from "@expo/vector-icons";
 import { TopBar, Screen, Card, Btn, LoadingScreen, EmptyState, Chip, ErrorBanner } from "../../components/ui";
 import { api, photoUrl } from "../../api";
@@ -66,7 +67,7 @@ export default function RetailerProfileScreen({ navigation, route }) {
           <Card style={{ marginBottom: 14, backgroundColor: T.goldLight, borderColor: T.goldLight }}>
             {promotions.map((p) => (
               <Text key={p.promotion_id} style={{ fontSize: 12, fontWeight: "700", color: "#8A6A0C" }}>
-                🎉 {p.title} — {p.discount_pct}% off, valid till {p.end_date}
+                🎉 {p.title} — {p.discount_pct}% off, valid till {fmtDate(p.end_date)}
               </Text>
             ))}
           </Card>
