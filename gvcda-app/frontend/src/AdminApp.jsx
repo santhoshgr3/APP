@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import {
   Home, Store, Users, MapPinned, TrendingUp, AlertCircle, LogOut, IndianRupee,
-  Megaphone, UserCog, ChevronRight, Plus, Banknote, ExternalLink, Settings,
+  Megaphone, UserCog, ChevronRight, Plus, Banknote, ExternalLink, Settings, ClipboardCheck, Truck,
 } from "lucide-react";
 import { api, photoUrl } from "./api";
-import { Card, Btn, Chip, EmptyState, LoadingScreen, ErrorBanner, Field, inputStyle, ChangePasswordCard, T } from "./ui";
+import { Card, Btn, Chip, EmptyState, ErrorBanner, Field, inputStyle, ChangePasswordCard, Grid, Table, LoadingScreenInline, T } from "./ui";
+import { TeamOpsTab, DeliveriesTab } from "./AdminTeamOps";
 
 // Admin is a separate, full-width web dashboard (not the phone-frame mobile shell) —
 // per the PRD, it's a heavier data-table workflow better suited to a large screen.
@@ -19,6 +20,8 @@ export default function AdminApp({ user, onLogout }) {
     { id: "territory", label: "Territory Drill-down", icon: MapPinned },
     { id: "approvals", label: "Retailer Approvals", icon: Store },
     { id: "team", label: "Employee Performance", icon: Users },
+    { id: "teamops", label: "Team Operations", icon: ClipboardCheck },
+    { id: "deliveries", label: "GVCDA Deliveries", icon: Truck },
     { id: "revenue", label: "Revenue & Commission", icon: IndianRupee },
     { id: "complaints", label: "Complaint Desk", icon: AlertCircle },
     { id: "broadcast", label: "Broadcast Tool", icon: Megaphone },
@@ -32,6 +35,8 @@ export default function AdminApp({ user, onLogout }) {
     territory: <TerritoryTab refreshKey={refreshKey} />,
     approvals: <ApprovalsTab refreshKey={refreshKey} onAction={refresh} />,
     team: <TeamTab refreshKey={refreshKey} />,
+    teamops: <TeamOpsTab refreshKey={refreshKey} onAction={refresh} />,
+    deliveries: <DeliveriesTab refreshKey={refreshKey} />,
     revenue: <RevenueTab refreshKey={refreshKey} />,
     complaints: <ComplaintsTab refreshKey={refreshKey} onAction={refresh} />,
     broadcast: <BroadcastTab refreshKey={refreshKey} onAction={refresh} />,
@@ -43,7 +48,10 @@ export default function AdminApp({ user, onLogout }) {
     <div style={{ display: "flex", height: "100%", background: T.cream }}>
       <div style={{ width: 230, flexShrink: 0, background: T.tealDark, color: "#fff", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "20px 18px 14px" }}>
-          <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 800, fontSize: 17 }}>GVCDA Admin</div>
+          <div style={{ background: "#fff", borderRadius: 12, padding: "8px 10px", textAlign: "center" }}>
+            <img src="/logo.png" alt="GVCDA" style={{ height: 54, width: "auto" }} />
+          </div>
+          <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 800, fontSize: 14, marginTop: 10 }}>Admin</div>
           <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{user.full_name}</div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
@@ -76,33 +84,6 @@ export default function AdminApp({ user, onLogout }) {
       </div>
     </div>
   );
-}
-
-function Grid({ children, cols = 4 }) {
-  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: 12 }}>{children}</div>;
-}
-
-function Table({ columns, rows, rowKey, renderRow }) {
-  if (rows === null) return <LoadingScreenInline />;
-  if (rows.length === 0) return <EmptyState icon={AlertCircle} text="Nothing here yet." />;
-  return (
-    <div style={{ overflowX: "auto", background: "#fff", border: `1px solid ${T.line}`, borderRadius: 12 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
-        <thead>
-          <tr style={{ background: T.tealLight }}>
-            {columns.map((c) => (
-              <th key={c} style={{ textAlign: "left", padding: "10px 14px", color: T.tealDark, fontWeight: 700, fontSize: 11.5, whiteSpace: "nowrap" }}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{rows.map((r) => renderRow(r))}</tbody>
-      </table>
-    </div>
-  );
-}
-
-function LoadingScreenInline() {
-  return <div style={{ padding: 40, textAlign: "center", color: T.inkSoft, fontSize: 13 }}>Loading...</div>;
 }
 
 function OverviewTab({ refreshKey, onNav }) {
@@ -337,6 +318,8 @@ function RevenueTab({ refreshKey }) {
   );
 }
 
+const ROLE_TONE = { member: "teal", retailer: "terracotta", employee: "purple", admin: "blue" };
+
 function ComplaintsTab({ refreshKey, onAction }) {
   const [rows, setRows] = useState(null);
   const [open, setOpen] = useState(null);
@@ -355,7 +338,11 @@ function ComplaintsTab({ refreshKey, onAction }) {
         <Card key={c.complaint_id}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>{c.category || "General"} — {c.raised_by_name}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {c.category || "General"} — {c.raised_by_name}
+                {c.raised_by_role && <Chip tone={ROLE_TONE[c.raised_by_role] || "gray"}>{ROLE_LABEL_ADMIN[c.raised_by_role] || c.raised_by_role}</Chip>}
+              </div>
+              {c.raised_by_phone && <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{c.raised_by_phone}</div>}
               {c.against_retailer_name && <div style={{ fontSize: 11, color: T.inkSoft }}>Against: {c.against_retailer_name}</div>}
               <div style={{ fontSize: 12, color: T.ink, marginTop: 4 }}>{c.description}</div>
               {c.resolution_notes && <div style={{ fontSize: 11, color: T.teal, marginTop: 4 }}>Resolution: {c.resolution_notes}</div>}
@@ -470,12 +457,13 @@ function UsersTab({ refreshKey, onAction }) {
       </div>
       {adding && <AddUserForm onDone={() => { setAdding(false); onAction(); }} />}
       <Table
-        columns={["Name", "Phone", "Role", "Designation", "Territory", "Status", "Action"]}
+        columns={["Name", "Phone", "Email", "Role", "Designation", "Territory", "Status", "Action"]}
         rows={rows}
         renderRow={(u) => (
           <tr key={u.user_id} style={{ borderTop: `1px solid ${T.line}` }}>
             <td style={{ padding: "10px 14px", fontWeight: 700 }}>{u.full_name}</td>
             <td style={{ padding: "10px 14px" }}>{u.phone}</td>
+            <td style={{ padding: "10px 14px", color: T.inkSoft }}>{u.email || "—"}</td>
             <td style={{ padding: "10px 14px", textTransform: "capitalize" }}>{u.role}</td>
             <td style={{ padding: "10px 14px", textTransform: "capitalize" }}>{(u.designation || "—").replaceAll("_", " ")}</td>
             <td style={{ padding: "10px 14px" }}>{[u.district_name, u.mandal_name].filter(Boolean).join(" → ") || "—"}</td>
@@ -504,6 +492,8 @@ function AddUserForm({ onDone }) {
   const [phone, setPhone] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [salary, setSalary] = useState("");
   const [designation, setDesignation] = useState("volunteer");
   const [districts, setDistricts] = useState([]);
   const [mandals, setMandals] = useState([]);
@@ -518,10 +508,13 @@ function AddUserForm({ onDone }) {
   const submit = async () => {
     if (!phone || !fullName) { setError("Phone and name are required"); return; }
     if (password.length < 6) { setError("Temporary password must be at least 6 characters"); return; }
+    if (salary !== "" && !(Number(salary) >= 0)) { setError("Monthly salary must be 0 or more"); return; }
     setError(""); setSaving(true);
     try {
       await api.addUser({
         phone, full_name: fullName, role, password,
+        email: email.trim() || undefined,
+        monthly_salary: role === "employee" && salary !== "" ? Number(salary) : undefined,
         designation: role === "employee" ? designation : undefined,
         territory_district_id: role === "employee" ? (districtId || null) : undefined,
         territory_mandal_id: role === "employee" ? (mandalId || null) : undefined,
@@ -542,6 +535,7 @@ function AddUserForm({ onDone }) {
         </Field>
         <Field label="Phone"><input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit number" /></Field>
         <Field label="Full name"><input style={inputStyle} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Field>
+        <Field label="Email (optional)"><input style={inputStyle} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></Field>
         <Field label="Temporary password"><input style={inputStyle} type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 6 characters — share with them" /></Field>
         {role === "employee" && (
           <>
@@ -553,6 +547,7 @@ function AddUserForm({ onDone }) {
                 <option value="volunteer">Volunteer</option>
               </select>
             </Field>
+            <Field label="Monthly salary (₹)"><input style={inputStyle} inputMode="numeric" value={salary} onChange={(e) => setSalary(e.target.value.replace(/\D/g, ""))} placeholder="Optional, can be set later" /></Field>
             <Field label="District">
               <select style={inputStyle} value={districtId} onChange={(e) => setDistrictId(e.target.value)}>
                 <option value="">Select</option>

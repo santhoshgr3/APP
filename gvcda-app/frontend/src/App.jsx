@@ -81,9 +81,9 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#F1ECE1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 420 }}>
-        <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 800, fontSize: 22, color: T.tealDark }}>GVCDA App</div>
+        <img src="/logo.png" alt="GVCDA" style={{ height: 64, width: "auto" }} />
         <div style={{ fontSize: 12.5, color: T.inkSoft, marginTop: 4 }}>
-          One app for Member, Employee and Retailer — role resolves after login. Admin is a separate web dashboard.
+          One app for Members, Employees and Retailers — your role opens after you log in.
         </div>
       </div>
       <PhoneFrame>

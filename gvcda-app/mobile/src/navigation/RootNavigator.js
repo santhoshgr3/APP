@@ -15,13 +15,19 @@ import OrderTrackingScreen from "../screens/member/OrderTrackingScreen";
 import JobDetailScreen from "../screens/member/JobDetailScreen";
 import ComplaintScreen from "../screens/member/ComplaintScreen";
 import DigitalCardScreen from "../screens/member/DigitalCardScreen";
+import TransactionsScreen from "../screens/member/TransactionsScreen";
 
 import EnrolMemberScreen from "../screens/employee/EnrolMemberScreen";
 import ListRetailerScreen from "../screens/employee/ListRetailerScreen";
+import IdCardScreen from "../screens/employee/IdCardScreen";
+import PayScreen from "../screens/employee/PayScreen";
+import DailyReportScreen from "../screens/employee/DailyReportScreen";
 
 import RetailerRegisterScreen from "../screens/retailer/RetailerRegisterScreen";
 import PendingApprovalScreen from "../screens/retailer/PendingApprovalScreen";
 import OrderDetailScreen from "../screens/retailer/OrderDetailScreen";
+import CustomerDetailScreen from "../screens/retailer/CustomerDetailScreen";
+import SupportScreen from "../screens/SupportScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -49,13 +55,21 @@ export default function RootNavigator() {
       <Stack.Screen name="JobDetail" component={JobDetailScreen} />
       <Stack.Screen name="Complaint" component={ComplaintScreen} />
       <Stack.Screen name="DigitalCard" component={DigitalCardScreen} />
+      <Stack.Screen name="Transactions" component={TransactionsScreen} />
 
       {/* Employee drill-downs */}
       <Stack.Screen name="EnrolMember" component={EnrolMemberScreen} />
       <Stack.Screen name="ListRetailer" component={ListRetailerScreen} />
+      <Stack.Screen name="IdCard" component={IdCardScreen} />
+      <Stack.Screen name="Pay" component={PayScreen} />
+      <Stack.Screen name="DailyReport" component={DailyReportScreen} />
 
       {/* Retailer drill-downs */}
       <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
+      <Stack.Screen name="CustomerDetail" component={CustomerDetailScreen} />
+
+      {/* Shared by Retailer and Employee */}
+      <Stack.Screen name="Support" component={SupportScreen} />
     </Stack.Navigator>
   );
 }

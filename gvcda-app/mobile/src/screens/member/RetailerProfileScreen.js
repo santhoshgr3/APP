@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Image, ScrollView, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { TopBar, Screen, Card, Btn, LoadingScreen, EmptyState, Chip } from "../../components/ui";
+import { TopBar, Screen, Card, Btn, LoadingScreen, EmptyState, Chip, ErrorBanner } from "../../components/ui";
 import { api, photoUrl } from "../../api";
 import { useCart } from "../../context/CartContext";
 import { T } from "../../theme";
@@ -12,7 +12,8 @@ export default function RetailerProfileScreen({ navigation, route }) {
   const [data, setData] = useState(null);
   const { cart, addToCart, clearCart, total, count } = useCart();
 
-  useEffect(() => { api.memberRetailerDetail(id).then(setData); }, [id]);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => { api.memberRetailerDetail(id).then(setData).catch((e) => setLoadError(e.message)); }, [id]);
 
   // An order can only ever belong to one retailer (CartScreen sends the whole
   // cart under one retailer_id), so adding a product from a different shop than
@@ -35,8 +36,8 @@ export default function RetailerProfileScreen({ navigation, route }) {
 
   if (!data) return (
     <View style={{ flex: 1, backgroundColor: T.cream }}>
-      <TopBar title="Loading..." onBack={() => navigation.goBack()} />
-      <LoadingScreen />
+      <TopBar title={loadError ? "Shop" : "Loading..."} onBack={() => navigation.goBack()} />
+      {loadError ? <Screen><ErrorBanner message={loadError} /></Screen> : <LoadingScreen />}
     </View>
   );
 
@@ -73,22 +74,38 @@ export default function RetailerProfileScreen({ navigation, route }) {
 
         <Text style={{ fontSize: 12, fontWeight: "700", marginBottom: 8 }}>Products & Services</Text>
         {products.length === 0 && <EmptyState icon="shopping-cart" text="No products listed yet." />}
-        {products.map((p) => (
-          <Card key={p.product_id} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 }}>
-              {p.image_filename ? (
-                <Image source={{ uri: photoUrl(p.image_filename) }} style={{ width: 44, height: 44, borderRadius: 8 }} />
-              ) : (
-                <View style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: T.tealLight }} />
-              )}
-              <View>
-                <Text style={{ fontSize: 12.5, fontWeight: "700" }}>{p.name}</Text>
-                <Text style={{ fontSize: 11.5, color: T.terracotta, fontWeight: "700" }}>₹{p.price}</Text>
+        {products.map((p) => {
+          const isService = p.item_type === "service";
+          const tracked = !isService && p.stock !== null && p.stock !== undefined;
+          const inCart = cart.find((c) => c.product_id === p.product_id)?.qty || 0;
+          const soldOut = tracked && Number(p.stock) <= 0;
+          const capped = tracked && !soldOut && inCart >= Number(p.stock);
+          const low = tracked && Number(p.stock) > 0 && Number(p.stock) <= 5;
+          return (
+            <Card key={p.product_id} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 }}>
+                {p.image_filename ? (
+                  <Image source={{ uri: photoUrl(p.image_filename) }} style={{ width: 44, height: 44, borderRadius: 8, opacity: soldOut ? 0.5 : 1 }} />
+                ) : (
+                  <View style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: isService ? T.purpleLight : T.tealLight }} />
+                )}
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={{ fontSize: 12.5, fontWeight: "700", opacity: soldOut ? 0.5 : 1 }}>{p.name}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
+                    <Text style={{ fontSize: 11.5, color: T.terracotta, fontWeight: "700" }}>₹{p.price}</Text>
+                    {isService ? <Chip tone="purple">Service</Chip> : null}
+                    {soldOut ? <Chip tone="red">Out of stock</Chip> : low ? <Chip tone="gold">{`Only ${p.stock} left`}</Chip> : null}
+                  </View>
+                </View>
               </View>
-            </View>
-            <Btn variant="secondary" icon="plus" onPress={() => handleAdd({ ...p, retailer_id: retailer.retailer_id })}>Add</Btn>
-          </Card>
-        ))}
+              {soldOut ? null : (
+                <Btn variant="secondary" icon={isService ? "calendar" : "plus"} disabled={capped} onPress={() => handleAdd({ ...p, retailer_id: retailer.retailer_id })}>
+                  {isService ? "Book" : capped ? "Max" : "Add"}
+                </Btn>
+              )}
+            </Card>
+          );
+        })}
         {data.reviews?.length > 0 && (
           <>
             <Text style={{ fontSize: 12, fontWeight: "700", marginTop: 16, marginBottom: 8 }}>Reviews</Text>

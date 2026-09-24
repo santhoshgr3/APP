@@ -15,6 +15,7 @@ export default function RegistrationScreen({ navigation }) {
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("female");
   const [address, setAddress] = useState("");
+  const [email, setEmail] = useState("");
   const [loc, setLoc] = useState({ district_id: null, mandal_id: null, village_id: null });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -31,6 +32,7 @@ export default function RegistrationScreen({ navigation }) {
         age: age ? Number(age) : null,
         gender,
         address: address.trim() || null,
+        ...(email.trim() ? { email: email.trim() } : {}),
       });
       await refreshUser();
       navigation.replace("PlanSelect");
@@ -45,6 +47,9 @@ export default function RegistrationScreen({ navigation }) {
         <ErrorBanner message={error} />
         <Field label="Full name *">
           <Input value={fullName} onChangeText={setFullName} placeholder="Your name" />
+        </Field>
+        <Field label="Email (optional)">
+          <Input value={email} onChangeText={setEmail} placeholder="name@example.com" autoCapitalize="none" keyboardType="email-address" />
         </Field>
         <Field label="Age">
           <Input value={age} onChangeText={setAge} keyboardType="number-pad" placeholder="Optional" />

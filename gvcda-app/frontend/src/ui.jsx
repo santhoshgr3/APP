@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, AlertCircle } from "lucide-react";
 import { api } from "./api";
 
 export const T = {
@@ -71,8 +71,10 @@ export function Chip({ children, tone = "teal" }) {
   const map = {
     teal: [T.tealLight, T.teal], gold: [T.goldLight, "#8A6A0C"],
     red: [T.redLight, T.red], terracotta: [T.terracottaLight, T.terracotta],
+    green: [T.greenLight, T.green], blue: [T.blueLight, T.blue], purple: [T.purpleLight, T.purple],
+    gray: ["#EEEBE4", T.inkSoft],
   };
-  const [bg, fg] = map[tone];
+  const [bg, fg] = map[tone] || map.teal;
   return <span style={{ fontSize: 10.5, padding: "3px 10px", borderRadius: 20, background: bg, color: fg, fontWeight: 700 }}>{children}</span>;
 }
 
@@ -195,5 +197,33 @@ export function ChangePasswordCard({ style }) {
         <Btn variant="ghost" onClick={() => { setOpen(false); reset(); }}>Cancel</Btn>
       </div>
     </Card>
+  );
+}
+
+// Admin dashboard table primitives — shared by AdminApp and AdminTeamOps.
+export function Grid({ children, cols = 4 }) {
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: 12 }}>{children}</div>;
+}
+
+export function LoadingScreenInline() {
+  return <div style={{ padding: 40, textAlign: "center", color: T.inkSoft, fontSize: 13 }}>Loading...</div>;
+}
+
+export function Table({ columns, rows, renderRow, emptyText = "Nothing here yet." }) {
+  if (rows === null) return <LoadingScreenInline />;
+  if (rows.length === 0) return <EmptyState icon={AlertCircle} text={emptyText} />;
+  return (
+    <div style={{ overflowX: "auto", background: "#fff", border: `1px solid ${T.line}`, borderRadius: 12 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+        <thead>
+          <tr style={{ background: T.tealLight }}>
+            {columns.map((c) => (
+              <th key={c} style={{ textAlign: "left", padding: "10px 14px", color: T.tealDark, fontWeight: 700, fontSize: 11.5, whiteSpace: "nowrap" }}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{rows.map((r) => renderRow(r))}</tbody>
+      </table>
+    </div>
   );
 }

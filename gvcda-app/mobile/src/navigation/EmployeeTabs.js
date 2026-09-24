@@ -6,12 +6,12 @@ import { T } from "../theme";
 
 import DashboardScreen from "../screens/employee/DashboardScreen";
 import MyBookScreen from "../screens/employee/MyBookScreen";
-import IncentivesScreen from "../screens/employee/IncentivesScreen";
-import VisitLogScreen from "../screens/employee/VisitLogScreen";
+import AttendanceScreen from "../screens/employee/AttendanceScreen";
+import TasksScreen from "../screens/employee/TasksScreen";
 import MoreScreen from "../screens/employee/MoreScreen";
 
 const Tab = createBottomTabNavigator();
-const ICONS = { Dashboard: "grid", "My Book": "book-open", Incentives: "trending-up", Visits: "map-pin", More: "more-horizontal" };
+const ICONS = { Dashboard: "grid", Attendance: "clock", Tasks: "check-square", "My Book": "book-open", More: "more-horizontal" };
 
 export default function EmployeeTabs() {
   return (
@@ -26,9 +26,9 @@ export default function EmployeeTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Attendance" component={AttendanceScreen} />
+      <Tab.Screen name="Tasks" component={TasksScreen} />
       <Tab.Screen name="My Book" component={MyBookScreen} />
-      <Tab.Screen name="Incentives" component={IncentivesScreen} />
-      <Tab.Screen name="Visits" component={VisitLogScreen} />
       <Tab.Screen name="More" component={MoreScreen} />
     </Tab.Navigator>
   );

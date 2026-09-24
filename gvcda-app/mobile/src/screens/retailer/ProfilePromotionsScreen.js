@@ -3,14 +3,30 @@ import { View, Text, Switch, Image, TouchableOpacity } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
-import { Screen, Card, Btn, Field, Input, ErrorBanner, EmptyState, ChangePasswordCard } from "../../components/ui";
+import { Screen, Card, Btn, Chip, Field, Input, ErrorBanner, EmptyState, ChangePasswordCard, LoadingScreen } from "../../components/ui";
+import EmailCard from "../../components/EmailCard";
 import { api, photoUrl } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import RoleSwitcherCard from "../../components/RoleSwitcherCard";
+import { DELIVERY_LABEL } from "../../utils";
 import { T } from "../../theme";
 
+const METHODS = [
+  ["pickup", "Customers collect the order from your shop."],
+  ["self_delivery", "You deliver to the customer's address."],
+  ["gvcda_delivery", "GVCDA's delivery partner collects from your shop."],
+];
+const STATUS_TONE = { approved: "green", pending: "gold", rejected: "red", suspended: "red" };
+const STATUS_TEXT = {
+  approved: "Your shop is verified and visible to members.",
+  pending: "GVCDA is reviewing your listing.",
+  suspended: "Your listing is suspended. Contact support for help.",
+  rejected: "Your listing was not approved.",
+};
+const DEFAULT_METHODS = ["pickup", "self_delivery"];
+
 // Screen Spec 3.8 — storefront management + local marketing tool, plus account/logout.
-export default function ProfilePromotionsScreen() {
+export default function ProfilePromotionsScreen({ navigation }) {
   const { logout } = useAuth();
   const [retailer, setRetailer] = useState(null);
   const [promotions, setPromotions] = useState(null);
@@ -18,17 +34,22 @@ export default function ProfilePromotionsScreen() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [addingPromo, setAddingPromo] = useState(false);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
-  const [form, setForm] = useState({ address: "", hours: "", description: "", bank_account: "", bank_ifsc: "", upi_id: "" });
+  const [form, setForm] = useState({ address: "", hours: "", description: "", phone: "", bank_account: "", bank_ifsc: "", upi_id: "", delivery_methods: DEFAULT_METHODS });
   const [promo, setPromo] = useState({ title: "", discount_pct: "", days: "14" });
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
-    api.retailerMe().then((r) => { setRetailer(r.retailer); setForm({
-      address: r.retailer.address || "", hours: r.retailer.hours || "", description: r.retailer.description || "",
-      bank_account: r.retailer.bank_account || "", bank_ifsc: r.retailer.bank_ifsc || "", upi_id: r.retailer.upi_id || "",
-    }); });
-    api.retailerPromotions().then(setPromotions);
-    api.retailerPhotos().then(setPhotos);
+    const fail = (e) => setError(e.message);
+    api.retailerMe().then((r) => {
+      setRetailer(r.retailer);
+      setForm({
+        address: r.retailer.address || "", hours: r.retailer.hours || "", description: r.retailer.description || "", phone: r.retailer.phone || "",
+        bank_account: r.retailer.bank_account || "", bank_ifsc: r.retailer.bank_ifsc || "", upi_id: r.retailer.upi_id || "",
+        delivery_methods: r.retailer.delivery_methods?.length ? r.retailer.delivery_methods : DEFAULT_METHODS,
+      });
+    }).catch(fail);
+    api.retailerPromotions().then(setPromotions).catch(fail);
+    api.retailerPhotos().then(setPhotos).catch(fail);
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -42,10 +63,16 @@ export default function ProfilePromotionsScreen() {
     catch (e) { setError(e.message); }
     setUploadingPhotos(false);
   };
-  const setPrimary = async (id) => { await api.setPrimaryPhoto(id); load(); };
-  const removePhoto = async (id) => { await api.deleteRetailerPhoto(id); load(); };
+  const setPrimary = async (id) => { try { await api.setPrimaryPhoto(id); load(); } catch (e) { setError(e.message); } };
+  const removePhoto = async (id) => { try { await api.deleteRetailerPhoto(id); load(); } catch (e) { setError(e.message); } };
+
+  const toggleMethod = (m) => setForm((f) => ({
+    ...f,
+    delivery_methods: f.delivery_methods.includes(m) ? f.delivery_methods.filter((x) => x !== m) : [...f.delivery_methods, m],
+  }));
 
   const saveProfile = async () => {
+    if (form.delivery_methods.length === 0) { setError("Choose at least one delivery option"); return; }
     setError("");
     try { await api.updateRetailerProfile(form); setEditingProfile(false); load(); }
     catch (e) { setError(e.message); }
@@ -65,13 +92,28 @@ export default function ProfilePromotionsScreen() {
     } catch (e) { setError(e.message); }
   };
 
-  const togglePromo = async (p) => { await api.togglePromotion(p.promotion_id, !p.is_active); load(); };
+  const togglePromo = async (p) => { try { await api.togglePromotion(p.promotion_id, !p.is_active); load(); } catch (e) { setError(e.message); } };
 
-  if (!retailer || !promotions || !photos) return null;
+  if (!retailer || !promotions || !photos) {
+    return error ? <Screen><ErrorBanner message={error} /></Screen> : <LoadingScreen />;
+  }
+
+  const statusBg = retailer.status === "approved" ? T.greenLight : retailer.status === "pending" ? T.goldLight : T.redLight;
 
   return (
     <Screen>
       <ErrorBanner message={error} />
+
+      <Card style={{ marginBottom: 14, backgroundColor: statusBg, borderColor: statusBg }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: T.inkSoft }}>VERIFICATION STATUS</Text>
+          <Chip tone={STATUS_TONE[retailer.status] || "gold"}>{retailer.status}</Chip>
+        </View>
+        <Text style={{ fontSize: 12, color: T.ink, marginTop: 6 }}>{STATUS_TEXT[retailer.status] || ""}</Text>
+        {retailer.rejection_reason ? <Text style={{ fontSize: 12, color: T.red, marginTop: 4, fontWeight: "700" }}>Reason: {retailer.rejection_reason}</Text> : null}
+      </Card>
+
+      <EmailCard />
 
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <Text style={{ fontSize: 13, fontWeight: "700" }}>Business Profile</Text>
@@ -79,21 +121,45 @@ export default function ProfilePromotionsScreen() {
       </View>
       {editingProfile ? (
         <Card style={{ marginBottom: 20 }}>
+          <Field label="Shop phone"><Input value={form.phone} onChangeText={(v) => setForm((f) => ({ ...f, phone: v.replace(/\D/g, "").slice(0, 10) }))} keyboardType="number-pad" /></Field>
           <Field label="Address"><Input value={form.address} onChangeText={(v) => setForm((f) => ({ ...f, address: v }))} /></Field>
           <Field label="Hours"><Input value={form.hours} onChangeText={(v) => setForm((f) => ({ ...f, hours: v }))} placeholder="e.g. 8:00 AM - 9:00 PM daily" /></Field>
           <Field label="Description"><Input value={form.description} onChangeText={(v) => setForm((f) => ({ ...f, description: v }))} multiline /></Field>
-          <Text style={{ fontSize: 11, fontWeight: "700", color: T.inkSoft, marginTop: 6, marginBottom: 8 }}>PAYOUT DETAILS</Text>
-          <Field label="Bank account number"><Input value={form.bank_account} onChangeText={(v) => setForm((f) => ({ ...f, bank_account: v }))} /></Field>
-          <Field label="IFSC"><Input value={form.bank_ifsc} onChangeText={(v) => setForm((f) => ({ ...f, bank_ifsc: v }))} autoCapitalize="characters" /></Field>
+
+          <Text style={{ fontSize: 11, fontWeight: "700", color: T.inkSoft, marginTop: 6, marginBottom: 8 }}>DELIVERY OPTIONS</Text>
+          {METHODS.map(([m, help]) => (
+            <View key={m} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={{ fontSize: 12.5, fontWeight: "700" }}>{DELIVERY_LABEL[m]}</Text>
+                <Text style={{ fontSize: 11, color: T.inkSoft }}>{help}</Text>
+              </View>
+              <Switch value={form.delivery_methods.includes(m)} onValueChange={() => toggleMethod(m)} trackColor={{ true: T.teal }} />
+            </View>
+          ))}
+
+          <Text style={{ fontSize: 11, fontWeight: "700", color: T.inkSoft, marginTop: 6, marginBottom: 8 }}>PAYMENT DETAILS</Text>
           <Field label="UPI ID"><Input value={form.upi_id} onChangeText={(v) => setForm((f) => ({ ...f, upi_id: v }))} placeholder="name@upi" autoCapitalize="none" /></Field>
+          <Text style={{ fontSize: 11, color: T.inkSoft, marginBottom: 12, marginTop: -6 }}>Members only see the UPI payment option once your UPI ID is set.</Text>
+          <Field label="Bank account number"><Input value={form.bank_account} onChangeText={(v) => setForm((f) => ({ ...f, bank_account: v }))} keyboardType="number-pad" /></Field>
+          <Field label="IFSC"><Input value={form.bank_ifsc} onChangeText={(v) => setForm((f) => ({ ...f, bank_ifsc: v }))} autoCapitalize="characters" /></Field>
           <Btn full onPress={saveProfile}>Save Profile</Btn>
         </Card>
       ) : (
         <Card style={{ marginBottom: 20 }}>
           <Text style={{ fontSize: 14, fontWeight: "700" }}>{retailer.business_name}</Text>
           <Text style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 4 }}>{retailer.address || "No address set"}</Text>
-          {retailer.hours ? <Text style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 2 }}>{retailer.hours}</Text> : null}
+          {retailer.phone ? <Text style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 2 }}>Phone: {retailer.phone}</Text> : null}
+          {retailer.hours ? <Text style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 2 }}>Hours: {retailer.hours}</Text> : null}
           {retailer.description ? <Text style={{ fontSize: 12, color: T.ink, marginTop: 8 }}>{retailer.description}</Text> : null}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+            {(retailer.delivery_methods || []).map((m) => <Chip key={m} tone="blue">{DELIVERY_LABEL[m] || m}</Chip>)}
+          </View>
+          <Text style={{ fontSize: 11.5, color: retailer.upi_id ? T.ink : T.terracotta, marginTop: 8 }}>
+            UPI ID: {retailer.upi_id || "not set — UPI payments stay off until you add one"}
+          </Text>
+          <Text style={{ fontSize: 11.5, color: T.inkSoft, marginTop: 2 }}>
+            Bank: {retailer.bank_account ? `${retailer.bank_account} (${retailer.bank_ifsc || "no IFSC"})` : "not added"}
+          </Text>
         </Card>
       )}
 
@@ -152,6 +218,7 @@ export default function ProfilePromotionsScreen() {
         ))
       )}
 
+      <Btn full variant="ghost" icon="life-buoy" style={{ marginTop: 8, marginBottom: 8 }} onPress={() => navigation.navigate("Support")}>Help & Support</Btn>
       <RoleSwitcherCard />
       <ChangePasswordCard style={{ marginTop: 4, marginBottom: 8 }} />
       <Btn full variant="danger" icon="log-out" onPress={logout}>Log out</Btn>

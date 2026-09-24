@@ -89,6 +89,9 @@ export function Chip({ children, tone = "teal" }) {
     gold: [T.goldLight, "#8A6A0C"],
     red: [T.redLight, T.red],
     terracotta: [T.terracottaLight, T.terracotta],
+    green: [T.greenLight, T.green],
+    blue: [T.blueLight, T.blue],
+    purple: [T.purpleLight, T.purple],
   };
   const [bg, fg] = map[tone] || map.teal;
   return (

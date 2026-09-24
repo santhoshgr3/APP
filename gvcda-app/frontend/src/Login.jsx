@@ -8,6 +8,7 @@ export default function Login({ onLoggedIn }) {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +17,7 @@ export default function Login({ onLoggedIn }) {
     try {
       const res = mode === "login"
         ? await api.login(phone, password)
-        : await api.register(phone, password, fullName, referralCode.trim() || undefined);
+        : await api.register(phone, password, fullName, referralCode.trim() || undefined, email.trim() || undefined);
       saveSession(res.token, res.user, res.roles);
       onLoggedIn(res.user);
     } catch (e) { setError(e.message); }
@@ -27,9 +28,9 @@ export default function Login({ onLoggedIn }) {
 
   return (
     <Screen>
-      <div style={{ textAlign: "center", paddingTop: 40, marginBottom: 30 }}>
-        <div style={{ fontFamily: "Poppins, sans-serif", fontWeight: 800, fontSize: 30, color: T.tealDark }}>GVCDA</div>
-        <div style={{ fontSize: 12.5, color: T.inkSoft, marginTop: 6 }}>One Platform for Village & City Development</div>
+      <div style={{ textAlign: "center", paddingTop: 24, marginBottom: 24 }}>
+        <img src="/logo.png" alt="GVCDA — Global Village & City Development Agency" style={{ width: 220, maxWidth: "70%", height: "auto" }} />
+        <div style={{ fontSize: 12.5, color: T.inkSoft, marginTop: 6 }}>All in one Sector Service Hub</div>
       </div>
 
       <ErrorBanner message={error} />
@@ -38,6 +39,9 @@ export default function Login({ onLoggedIn }) {
         <>
           <Field label="Full name">
             <input style={inputStyle} placeholder="Your name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </Field>
+          <Field label="Email (optional)">
+            <input style={inputStyle} type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
           <Field label="Referral code (optional)">
             <input style={inputStyle} placeholder="e.g. 4ABA41" value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} />

@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { Screen, Card, Btn, Chip, LoadingScreen, EmptyState, ErrorBanner } from "../../components/ui";
 import BankTransferQR from "../../components/BankTransferQR";
+import ReportsSection from "./ReportsSection";
 import { api } from "../../api";
 import { T } from "../../theme";
 
@@ -52,7 +53,7 @@ export default function EarningsScreen() {
   return (
     <Screen>
       <Card style={{ marginBottom: 14 }}>
-        <Row label="Cash collected (COD)" value={`₹${earnings.gross}`} />
+        <Row label="Total sales collected" value={`₹${earnings.gross}`} />
         <Row label="Total commission" value={`₹${earnings.commission}`} muted />
         <Row label="You keep" value={`₹${earnings.net}`} bold />
         <Text style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 6 }}>{earnings.order_count} fulfilled order(s) to date.</Text>
@@ -83,7 +84,9 @@ export default function EarningsScreen() {
         <ErrorBanner message={error} />
       </Card>
 
-      <Text style={{ fontSize: 13, fontWeight: "700", marginBottom: 10 }}>Settlement History</Text>
+      <ReportsSection />
+
+      <Text style={{ fontSize: 13, fontWeight: "700", marginTop: 8, marginBottom: 10 }}>Settlement History</Text>
       {history.length === 0 ? <EmptyState icon="dollar-sign" text="No settlements yet." /> : (
         history.map((h) => (
           <Card key={h.request_id} style={{ marginBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>

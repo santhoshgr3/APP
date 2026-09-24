@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { Home, Users, Wallet, MapPinned, UserPlus, Plus, CheckCircle2, LogOut, Camera, TrendingUp } from "lucide-react";
+import React, { useState } from "react";
+import { Home, Users, Wallet, CalendarCheck, ListChecks, Menu, Plus, MapPinned, Camera } from "lucide-react";
 import { api } from "./api";
-import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ChangePasswordCard, AnnouncementsCard, T } from "./ui";
+import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptyState, LoadingScreen, ErrorBanner, T } from "./ui";
 import LocationCascade from "./LocationCascade";
+import { DashboardTab, AttendanceTab, TasksTab, PayTab, MoreTab, EmployeeSupport } from "./EmployeeExtras";
 
-export default function EmployeeApp({ user, onLogout }) {
+export default function EmployeeApp({ user, onLogout, onRoleChanged }) {
   const [tab, setTab] = useState("dashboard");
   const [stack, setStack] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -15,15 +16,28 @@ export default function EmployeeApp({ user, onLogout }) {
   const top = stack[stack.length - 1];
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  if (top?.screen === "enrol") return <EnrolForm onBack={() => { pop(); refresh(); setTab("dashboard"); }} />;
-  if (top?.screen === "listRetailer") return <ListRetailerForm onBack={() => { pop(); refresh(); setTab("book"); }} />;
+  if (top?.screen === "enrol") return <EnrolForm onBack={() => { pop(); refresh(); }} />;
+  if (top?.screen === "listRetailer") return <ListRetailerForm onBack={() => { pop(); refresh(); }} />;
+  if (top?.screen === "book") return (
+    <>
+      <TopBar title="My Book" subtitle="Members & retailers you brought in" onBack={pop} />
+      <BookTab push={push} refreshKey={refreshKey} />
+    </>
+  );
+  if (top?.screen === "visits") return (
+    <>
+      <TopBar title="Daily Work Report" subtitle="Log your visits" onBack={pop} />
+      <VisitLogTab refreshKey={refreshKey} onAction={refresh} />
+    </>
+  );
+  if (top?.screen === "support") return <EmployeeSupport onBack={pop} />;
 
   const tabs = [
-    { id: "dashboard", label: "Dashboard", icon: Home, Comp: () => <DashboardTab push={push} refreshKey={refreshKey} onTerritory={setTerritory} /> },
-    { id: "book", label: "My Book", icon: Users, Comp: () => <BookTab push={push} refreshKey={refreshKey} /> },
-    { id: "incentives", label: "Incentives", icon: TrendingUp, Comp: () => <IncentivesTab refreshKey={refreshKey} /> },
-    { id: "visits", label: "Visits", icon: MapPinned, Comp: () => <VisitLogTab refreshKey={refreshKey} onAction={refresh} /> },
-    { id: "profile", label: "Profile", icon: Wallet, Comp: () => <EmployeeProfile user={user} onLogout={onLogout} /> },
+    { id: "dashboard", label: "Dashboard", icon: Home, Comp: () => <DashboardTab push={push} go={changeTab} refreshKey={refreshKey} onTerritory={setTerritory} /> },
+    { id: "attendance", label: "Attendance", icon: CalendarCheck, Comp: () => <AttendanceTab refreshKey={refreshKey} onAction={refresh} /> },
+    { id: "tasks", label: "Tasks", icon: ListChecks, Comp: () => <TasksTab refreshKey={refreshKey} onAction={refresh} /> },
+    { id: "pay", label: "Pay", icon: Wallet, Comp: () => <PayTab refreshKey={refreshKey} /> },
+    { id: "more", label: "More", icon: Menu, Comp: () => <MoreTab push={push} onLogout={onLogout} onUserChanged={onRoleChanged} /> },
   ];
   const Active = tabs.find((t) => t.id === tab).Comp;
 
@@ -33,37 +47,6 @@ export default function EmployeeApp({ user, onLogout }) {
       <Active />
       <BottomTabs tabs={tabs} active={tab} onChange={changeTab} />
     </>
-  );
-}
-
-function DashboardTab({ push, refreshKey, onTerritory }) {
-  const [data, setData] = useState(null);
-  useEffect(() => { api.employeeDashboard().then((d) => {
-    setData(d);
-    onTerritory?.(d.employee.mandal_name || d.employee.district_name || "");
-  }); }, [refreshKey]);
-  if (!data) return <LoadingScreen />;
-
-  return (
-    <Screen>
-      <AnnouncementsCard fetchFn={api.employeeBroadcasts} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-        <Card>
-          <div style={{ fontSize: 10, color: T.inkSoft, fontWeight: 700 }}>MEMBERSHIPS SOLD</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: T.teal, marginTop: 4 }}>{data.memberships_sold}<span style={{ fontSize: 12, color: T.inkSoft }}> / {data.monthly_target}</span></div>
-          <div style={{ height: 5, background: T.line, borderRadius: 3, marginTop: 6 }}><div style={{ width: `${Math.min(100, data.memberships_sold / data.monthly_target * 100)}%`, height: 5, background: T.teal, borderRadius: 3 }} /></div>
-        </Card>
-        <Card>
-          <div style={{ fontSize: 10, color: T.inkSoft, fontWeight: 700 }}>RETAILERS LISTED</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: T.terracotta, marginTop: 4 }}>{data.retailers_listed}</div>
-          <div style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 6 }}>{data.retailers_pending} pending approval</div>
-        </Card>
-      </div>
-      <div style={{ display: "flex", gap: 10 }}>
-        <Btn full onClick={() => push("enrol")}><UserPlus size={14} /> Enrol Member</Btn>
-        <Btn full variant="secondary" onClick={() => push("listRetailer")}><Plus size={14} /> List Retailer</Btn>
-      </div>
-    </Screen>
   );
 }
 
@@ -195,40 +178,6 @@ function ListRetailerForm({ onBack }) {
   );
 }
 
-function IncentivesTab({ refreshKey }) {
-  const [data, setData] = useState(null);
-  useEffect(() => { api.employeeIncentives().then(setData); }, [refreshKey]);
-  if (!data) return <LoadingScreen />;
-
-  return (
-    <Screen>
-      <div style={{ background: T.tealDark, borderRadius: 14, padding: 16, color: "#fff", marginBottom: 16 }}>
-        <div style={{ fontSize: 11, opacity: 0.75, fontWeight: 700 }}>RUNNING TOTAL (ALL TIME)</div>
-        <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>₹{data.running_total}</div>
-      </div>
-
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>This Month's Breakdown</div>
-      <Card style={{ marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontSize: 12.5, fontWeight: 700 }}>Memberships sold</div>
-          <div style={{ fontSize: 11, color: T.inkSoft }}>{data.this_month.membership_count} × ₹{data.this_month.membership_rate}</div>
-        </div>
-        <div style={{ fontSize: 14, fontWeight: 800, color: T.teal }}>₹{data.this_month.membership_amount}</div>
-      </Card>
-      <Card style={{ marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontSize: 12.5, fontWeight: 700 }}>Retailers onboarded</div>
-          <div style={{ fontSize: 11, color: T.inkSoft }}>{data.this_month.retailer_count} × ₹{data.this_month.retailer_rate}</div>
-        </div>
-        <div style={{ fontSize: 14, fontWeight: 800, color: T.terracotta }}>₹{data.this_month.retailer_amount}</div>
-      </Card>
-
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Payout History</div>
-      {data.payout_history.length === 0 && <EmptyState icon={Wallet} text="No payouts recorded yet." />}
-    </Screen>
-  );
-}
-
 const VISIT_PURPOSES = [
   ["enrolment", "Enrolment"], ["retailer", "Retailer"], ["follow_up", "Follow-up"], ["complaint", "Complaint"],
 ];
@@ -281,20 +230,6 @@ function VisitLogTab({ refreshKey, onAction }) {
           </Card>
         ))
       )}
-    </Screen>
-  );
-}
-
-function EmployeeProfile({ user, onLogout }) {
-  return (
-    <Screen>
-      <Card style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{user.full_name}</div>
-        <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3 }}>{user.phone}</div>
-        <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 3, textTransform: "capitalize" }}>{(user.designation || "").replaceAll("_", " ")}</div>
-      </Card>
-      <ChangePasswordCard style={{ marginBottom: 8 }} />
-      <Btn full variant="danger" onClick={onLogout}><LogOut size={13} /> Log out</Btn>
     </Screen>
   );
 }

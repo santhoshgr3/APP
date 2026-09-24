@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Home, Search, ClipboardList, Briefcase, User, MapPin, QrCode, Star, Plus, Minus,
   ShoppingCart, CheckCircle2, Clock, AlertCircle, Settings, LogOut, Send, Truck, Store,
-  Leaf, GraduationCap, Zap, Users, ShoppingBasket, HeartPulse, Wrench,
+  Leaf, GraduationCap, Zap, Users, ShoppingBasket, HeartPulse, Wrench, Receipt, Phone, CalendarClock, StickyNote, Ban,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { api, clearSession, saveSession, getSession, photoUrl } from "./api";
@@ -12,6 +12,8 @@ import { TopBar, BottomTabs, Card, Btn, Chip, Field, inputStyle, Screen, EmptySt
 // to the actual lucide-react components used here.
 const CATEGORY_ICONS = { Leaf, Briefcase, GraduationCap, Zap, Users, ShoppingBasket, HeartPulse, Wrench, Store };
 import BankTransferQR from "./BankTransferQR";
+import UpiPayBlock from "./UpiPayBlock";
+import { inr, fmtDate, fmtDateTime, fmtSlot, isoDay, useLoad, Loaded, DeliveryBadge, PaymentChip, DELIVERY_LABEL, orderTone, EmailCard } from "./shared";
 import LocationCascade from "./LocationCascade";
 
 // Shown once, right after login, to any brand-new self-signup Member with no
@@ -116,9 +118,14 @@ export default function MemberApp({ user, roles = [], onLogout, onRoleChanged })
   if (top?.screen === "cart") return (
     <CartScreen cart={cart} setCart={setCart} total={cartTotal} user={user}
       onBack={pop}
-      onPlaced={() => { setCart([]); setStack([]); setTab("orders"); }} />
+      onPlaced={(order) => {
+        setCart([]); setTab("orders");
+        // UPI orders open straight on the order screen so the customer can pay right away.
+        setStack(order?.payment_method === "upi" && order.order_id ? [{ screen: "orderDetail", params: { id: order.order_id, justPlaced: true } }] : []);
+      }} />
   );
-  if (top?.screen === "orderDetail") return <OrderDetail id={top.params.id} onBack={pop} />;
+  if (top?.screen === "orderDetail") return <OrderDetail id={top.params.id} justPlaced={top.params.justPlaced} onBack={pop} />;
+  if (top?.screen === "transactions") return <TransactionsScreen onBack={pop} onOpenOrder={(id) => push("orderDetail", { id })} />;
   if (top?.screen === "jobDetail") return <JobDetail id={top.params.id} onBack={pop} />;
   if (top?.screen === "complaint") return <ComplaintForm onBack={pop} />;
   if (top?.screen === "buyPlan") return <BuyPlan onBack={pop} onDone={() => { pop(); changeTab("profile"); }} />;
@@ -129,7 +136,7 @@ export default function MemberApp({ user, roles = [], onLogout, onRoleChanged })
     { id: "home", label: "Home", icon: Home, Comp: () => <HomeTab push={push} user={user} /> },
     { id: "orders", label: "Orders", icon: ClipboardList, Comp: () => <OrdersTab push={push} /> },
     { id: "jobs", label: "Jobs", icon: Briefcase, Comp: () => <JobsTab push={push} /> },
-    { id: "profile", label: "Profile", icon: User, Comp: () => <ProfileTab user={user} roles={roles} push={push} onLogout={onLogout} /> },
+    { id: "profile", label: "Profile", icon: User, Comp: () => <ProfileTab user={user} roles={roles} push={push} onLogout={onLogout} onUserChanged={onRoleChanged} /> },
   ];
   const Active = tabs.find((t) => t.id === tab).Comp;
 
@@ -144,8 +151,9 @@ export default function MemberApp({ user, roles = [], onLogout, onRoleChanged })
 
 function HomeTab({ push, user }) {
   const [data, setData] = useState(null);
-  useEffect(() => { api.memberHome().then(setData); }, []);
-  if (!data) return <LoadingScreen />;
+  const [err, setErr] = useState("");
+  useEffect(() => { api.memberHome().then(setData).catch((e) => setErr(e.message)); }, []);
+  if (!data) return err ? <Screen><ErrorBanner message={err} /></Screen> : <LoadingScreen />;
 
   return (
     <Screen>
@@ -181,6 +189,7 @@ function HomeTab({ push, user }) {
           <div>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{r.business_name}</div>
             <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{r.village_name} • {r.category_name}</div>
+            <RetailerBadges r={r} />
           </div>
         </Card>
       ))}
@@ -188,13 +197,25 @@ function HomeTab({ push, user }) {
   );
 }
 
+function RetailerBadges({ r }) {
+  if (!r.delivery_methods?.length && !r.accepts_upi) return null;
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
+      {(r.delivery_methods || []).map((m) => <DeliveryBadge key={m} method={m} />)}
+      {r.accepts_upi && <Chip tone="green">UPI</Chip>}
+    </div>
+  );
+}
+
 function SectorDetail({ categoryId, categoryName, onBack, onOpenRetailer }) {
   const [list, setList] = useState(null);
   const [q, setQ] = useState("");
+  const [err, setErr] = useState("");
   useEffect(() => {
     const params = { category_id: categoryId };
     if (q.trim()) params.q = q.trim();
-    const t = setTimeout(() => api.memberRetailers(params).then(setList), 250);
+    setErr("");
+    const t = setTimeout(() => api.memberRetailers(params).then(setList).catch((e) => { setErr(e.message); setList([]); }), 250);
     return () => clearTimeout(t);
   }, [categoryId, q]);
   if (!list) return <><TopBar title={categoryName} onBack={onBack} /><LoadingScreen /></>;
@@ -206,12 +227,13 @@ function SectorDetail({ categoryId, categoryName, onBack, onOpenRetailer }) {
           <Search size={14} color={T.inkSoft} style={{ position: "absolute", left: 10, top: 10 }} />
           <input style={{ ...inputStyle, paddingLeft: 30 }} placeholder="Search retailers..." value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        {list.length === 0 && <EmptyState icon={Search} text={q ? `No results for "${q}".` : `No ${categoryName} retailers listed in your Mandal yet.`} />}
+        <ErrorBanner message={err} />
+        {list.length === 0 && !err && <EmptyState icon={Search} text={q ? `No results for "${q}".` : `No ${categoryName} retailers listed in your Mandal yet.`} />}
         {list.map((r) => (
           <Card key={r.retailer_id} onClick={() => onOpenRetailer(r.retailer_id)} style={{ marginBottom: 8, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <RetailerThumb photo={r.primary_photo} category={categoryName} />
-              <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{r.business_name}</div><div style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</div></div>
+              <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{r.business_name}</div><div style={{ fontSize: 11, color: T.inkSoft }}>{r.village_name}</div><RetailerBadges r={r} /></div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, color: T.gold }}><Star size={12} fill={T.gold} color={T.gold} />{r.rating_avg || "New"}</div>
           </Card>
@@ -223,8 +245,9 @@ function SectorDetail({ categoryId, categoryName, onBack, onOpenRetailer }) {
 
 function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
   const [data, setData] = useState(null);
-  useEffect(() => { api.memberRetailerDetail(id).then(setData); }, [id]);
-  if (!data) return <><TopBar title="Loading..." onBack={onBack} /><LoadingScreen /></>;
+  const [err, setErr] = useState("");
+  useEffect(() => { api.memberRetailerDetail(id).then(setData).catch((e) => setErr(e.message)); }, [id]);
+  if (!data) return <><TopBar title="Loading..." onBack={onBack} />{err ? <Screen><ErrorBanner message={err} /></Screen> : <LoadingScreen />}</>;
 
   return (
     <>
@@ -235,6 +258,7 @@ function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
           <span style={{ fontSize: 13, fontWeight: 700, color: T.gold }}>{data.retailer.rating_avg || "New"}</span>
           <span style={{ fontSize: 11, color: T.inkSoft }}>({data.reviews?.length || 0} review{data.reviews?.length === 1 ? "" : "s"})</span>
         </div>
+        <div style={{ marginBottom: 12 }}><RetailerBadges r={data.retailer} /></div>
         {data.photos?.length > 0 && (
           <div style={{ display: "flex", gap: 8, overflowX: "auto", marginBottom: 16, paddingBottom: 2 }}>
             {data.photos.map((p) => (
@@ -244,19 +268,40 @@ function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
         )}
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Products & Services</div>
         {data.products.length === 0 && <EmptyState icon={ShoppingCart} text="No products listed yet." />}
-        {data.products.map((p) => (
-          <Card key={p.product_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {p.image_filename ? (
-                <img src={photoUrl(p.image_filename)} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+        {data.products.map((p) => {
+          const inCart = cart.find((i) => i.product_id === p.product_id)?.qty || 0;
+          const isService = p.item_type === "service";
+          const tracked = !isService && p.stock !== null && p.stock !== undefined;
+          const out = tracked && p.stock <= 0;
+          const atLimit = tracked && inCart >= p.stock;
+          return (
+            <Card key={p.product_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, opacity: out ? 0.7 : 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                {p.image_filename ? (
+                  <img src={photoUrl(p.image_filename)} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 44, height: 44, borderRadius: 8, background: T.tealLight, flexShrink: 0 }} />
+                )}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>{p.name}</div>
+                  <div style={{ fontSize: 11.5, color: T.terracotta, fontWeight: 700 }}>₹{p.price}</div>
+                  <div style={{ display: "flex", gap: 4, marginTop: 3, flexWrap: "wrap" }}>
+                    {isService && <Chip tone="purple">Service</Chip>}
+                    {out && <Chip tone="red">Out of stock</Chip>}
+                    {tracked && !out && p.stock <= 5 && <Chip tone="gold">Only {p.stock} left</Chip>}
+                  </div>
+                </div>
+              </div>
+              {out ? (
+                <Btn variant="ghost" disabled style={{ flexShrink: 0 }}><Ban size={12} /> Out of stock</Btn>
+              ) : isService ? (
+                <Btn variant="secondary" style={{ flexShrink: 0 }} disabled={inCart > 0} onClick={() => onAdd(p)}><CalendarClock size={12} /> {inCart > 0 ? "In cart" : "Book"}</Btn>
               ) : (
-                <div style={{ width: 44, height: 44, borderRadius: 8, background: T.tealLight, flexShrink: 0 }} />
+                <Btn variant="secondary" style={{ flexShrink: 0 }} disabled={atLimit} onClick={() => onAdd(p)}><Plus size={12} /> {atLimit ? `Max ${p.stock}` : "Add"}</Btn>
               )}
-              <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{p.name}</div><div style={{ fontSize: 11.5, color: T.terracotta, fontWeight: 700 }}>₹{p.price}</div></div>
-            </div>
-            <Btn variant="secondary" onClick={() => onAdd(p)}><Plus size={12} /> Add</Btn>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
         {data.reviews?.length > 0 && (
           <>
             <div style={{ fontSize: 12, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>Reviews</div>
@@ -283,75 +328,199 @@ function RetailerDetail({ id, onBack, cart, onAdd, onViewCart, cartTotal }) {
   );
 }
 
+const DELIVERY_HELP = {
+  pickup: "Collect your order from the shop yourself.",
+  self_delivery: "The shop delivers to your address.",
+  gvcda_delivery: "GVCDA's delivery partner collects from the shop and brings it to you.",
+};
+
+function ChoiceCard({ selected, onClick, title, help }) {
+  return (
+    <div onClick={onClick} style={{ border: `2px solid ${selected ? T.teal : T.line}`, background: selected ? T.tealLight : "#fff", borderRadius: 10, padding: "9px 12px", marginBottom: 6, cursor: "pointer" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: selected ? T.teal : T.ink }}>{title}</div>
+      {help && <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>{help}</div>}
+    </div>
+  );
+}
+
 function CartScreen({ cart, setCart, total, user, onBack, onPlaced }) {
+  const retailerId = cart[0]?.retailer_id;
+  const [retailer, setRetailer] = useState(null);
+  const [fresh, setFresh] = useState({});
+  const [loadErr, setLoadErr] = useState("");
+  const [method, setMethod] = useState("");
+  const [payment, setPayment] = useState("cod");
   const [address, setAddress] = useState(user?.address || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [notes, setNotes] = useState("");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (!retailerId) return;
+    api.memberRetailerDetail(retailerId).then((r) => {
+      setRetailer(r.retailer);
+      setFresh(Object.fromEntries(r.products.map((p) => [p.product_id, p])));
+      const m = r.retailer.delivery_methods?.length ? r.retailer.delivery_methods : ["pickup"];
+      setMethod((cur) => (m.includes(cur) ? cur : m[0]));
+    }).catch((e) => setLoadErr(e.message));
+  }, [retailerId]);
+
+  const stockOf = (i) => (fresh[i.product_id] ? fresh[i.product_id].stock : i.stock);
+  const hasService = cart.some((i) => i.item_type === "service");
+  const methods = retailer?.delivery_methods?.length ? retailer.delivery_methods : ["pickup"];
+  const needsAddress = method && method !== "pickup";
+
+  const setQty = (id, fn) => setCart((c) => c.map((x) => {
+    if (x.product_id !== id) return x;
+    const st = stockOf(x);
+    const q = Math.max(1, fn(x.qty));
+    return { ...x, qty: st !== null && st !== undefined ? Math.min(q, Math.max(1, st)) : q };
+  }));
+
   const place = async () => {
-    if (!address.trim()) { setError("Delivery address is required"); return; }
-    setPlacing(true); setError("");
+    setError("");
+    if (!method) { setError("Choose how you want to receive the order"); return; }
+    if (needsAddress && !address.trim()) { setError("Delivery address is required"); return; }
+    let scheduled_for;
+    if (hasService) {
+      if (!date || !time) { setError("Pick a date and time for your booking"); return; }
+      if (!(new Date(`${date}T${time}`) > new Date())) { setError("Booking time must be in the future"); return; }
+      scheduled_for = `${date}T${time}`;
+    }
+    setPlacing(true);
     try {
-      const retailerId = cart[0].retailer_id;
-      await api.placeOrder(retailerId, cart.map((i) => ({ product_id: i.product_id, quantity: i.qty })), address.trim(), phone.trim() || undefined);
-      onPlaced();
+      const res = await api.placeOrder(
+        retailerId,
+        cart.map((i) => ({ product_id: i.product_id, quantity: i.qty })),
+        needsAddress ? address.trim() : undefined,
+        phone.trim() || undefined,
+        { delivery_method: method, payment_method: payment, scheduled_for, order_notes: notes.trim() || undefined },
+      );
+      onPlaced(res.order);
     } catch (e) { setError(e.message); }
     setPlacing(false);
   };
 
+  if (cart.length === 0) {
+    return (
+      <>
+        <TopBar title="Your Cart" onBack={onBack} />
+        <Screen><EmptyState icon={ShoppingCart} text="Your cart is empty." /></Screen>
+      </>
+    );
+  }
+
   return (
     <>
-      <TopBar title="Your Cart" onBack={onBack} />
+      <TopBar title="Your Cart" subtitle={retailer?.business_name} onBack={onBack} />
       <Screen>
-        {error && <div style={{ color: T.red, fontSize: 12, marginBottom: 10 }}>{error}</div>}
-        {cart.map((i) => (
-          <Card key={i.product_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div><div style={{ fontSize: 12.5, fontWeight: 700 }}>{i.name}</div><div style={{ fontSize: 11, color: T.inkSoft }}>₹{i.price} each</div></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => setCart((c) => c.map((x) => x.product_id === i.product_id ? { ...x, qty: Math.max(1, x.qty - 1) } : x))} style={{ border: `1px solid ${T.line}`, background: "#fff", borderRadius: 6, width: 24, height: 24, cursor: "pointer" }}><Minus size={12} /></button>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>{i.qty}</span>
-              <button onClick={() => setCart((c) => c.map((x) => x.product_id === i.product_id ? { ...x, qty: x.qty + 1 } : x))} style={{ border: `1px solid ${T.line}`, background: "#fff", borderRadius: 6, width: 24, height: 24, cursor: "pointer" }}><Plus size={12} /></button>
-            </div>
-          </Card>
-        ))}
-        <Card style={{ marginTop: 10, display: "flex", justifyContent: "space-between" }}>
+        <ErrorBanner message={loadErr} />
+        <ErrorBanner message={error} />
+        {cart.map((i) => {
+          const isService = i.item_type === "service";
+          const st = stockOf(i);
+          return (
+            <Card key={i.product_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 700 }}>{i.name} {isService && <Chip tone="purple">Service</Chip>}</div>
+                <div style={{ fontSize: 11, color: T.inkSoft }}>₹{i.price} each</div>
+                {!isService && st !== null && st !== undefined && st <= 5 && <div style={{ fontSize: 10.5, color: T.terracotta, fontWeight: 700, marginTop: 2 }}>Only {st} available</div>}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {!isService && (
+                  <>
+                    <button onClick={() => setQty(i.product_id, (q) => q - 1)} style={{ border: `1px solid ${T.line}`, background: "#fff", borderRadius: 6, width: 24, height: 24, cursor: "pointer" }}><Minus size={12} /></button>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>{i.qty}</span>
+                    <button onClick={() => setQty(i.product_id, (q) => q + 1)} disabled={st !== null && st !== undefined && i.qty >= st} style={{ border: `1px solid ${T.line}`, background: "#fff", borderRadius: 6, width: 24, height: 24, cursor: "pointer", opacity: st !== null && st !== undefined && i.qty >= st ? 0.4 : 1 }}><Plus size={12} /></button>
+                  </>
+                )}
+                <button onClick={() => setCart((c) => c.filter((x) => x.product_id !== i.product_id))} title="Remove" style={{ border: "none", background: "none", color: T.red, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Remove</button>
+              </div>
+            </Card>
+          );
+        })}
+        <Card style={{ marginTop: 10, marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
           <span style={{ fontSize: 13, fontWeight: 700 }}>Total</span><span style={{ fontSize: 14, fontWeight: 800, color: T.teal }}>₹{total}</span>
         </Card>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, marginBottom: 8, fontSize: 11.5, color: T.inkSoft }}>
-          <Truck size={13} color={T.teal} /> Cash on Delivery — pay the retailer directly when your order arrives.
-        </div>
-        <Field label="Delivery address *">
-          <input style={inputStyle} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="House no, street, landmark" />
-        </Field>
-        <Field label="Contact phone for delivery">
-          <input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />
-        </Field>
+
+        {!retailer && !loadErr && <LoadingScreen text="Loading shop options..." />}
+        {retailer && (
+          <>
+            <Field label="How do you want to get it?">
+              {methods.map((m) => <ChoiceCard key={m} selected={method === m} onClick={() => setMethod(m)} title={DELIVERY_LABEL[m] || m} help={DELIVERY_HELP[m]} />)}
+            </Field>
+
+            {needsAddress ? (
+              <Field label="Delivery address *">
+                <input style={inputStyle} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="House no, street, landmark" />
+              </Field>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, fontSize: 11.5, color: T.inkSoft }}>
+                <Store size={13} color={T.teal} /> Pickup at store{retailer.address ? ` — ${retailer.address}` : ""}
+              </div>
+            )}
+            <Field label={needsAddress ? "Contact phone for delivery" : "Contact phone"}>
+              <input style={inputStyle} value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+            </Field>
+
+            {hasService && (
+              <Field label="Booking date & time *">
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input style={inputStyle} type="date" min={isoDay()} value={date} onChange={(e) => setDate(e.target.value)} />
+                  <input style={inputStyle} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                </div>
+                <div style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 4 }}>Indian Standard Time. The shop will confirm your slot.</div>
+              </Field>
+            )}
+
+            <Field label="Notes for the shop (optional)">
+              <textarea style={{ ...inputStyle, minHeight: 56 }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={hasService ? "Anything they should know for the booking" : "e.g. Leave with the neighbour"} />
+            </Field>
+
+            <Field label="Payment">
+              <ChoiceCard selected={payment === "cod"} onClick={() => setPayment("cod")} title="Cash on delivery / at store" help="Pay the shop directly when you receive the order." />
+              {retailer.accepts_upi && (
+                <ChoiceCard selected={payment === "upi"} onClick={() => setPayment("upi")} title="UPI" help="Pay from any UPI app right after placing the order." />
+              )}
+            </Field>
+          </>
+        )}
       </Screen>
       <div style={{ padding: 14, borderTop: `1px solid ${T.line}` }}>
-        <Btn full onClick={place} disabled={placing || !address.trim()}>{placing ? "Placing..." : "Place Order (Cash on Delivery)"}</Btn>
+        <Btn full onClick={place} disabled={placing || !retailer}>
+          {placing ? "Placing..." : payment === "upi" ? `Place Order & Pay ₹${total} via UPI` : "Place Order (Pay the shop)"}
+        </Btn>
       </div>
     </>
   );
 }
 
 function OrdersTab({ push }) {
-  const [orders, setOrders] = useState(null);
-  useEffect(() => { api.memberOrders().then(setOrders); }, []);
-  if (!orders) return <LoadingScreen />;
+  const q = useLoad(() => api.memberOrders(), []);
   return (
     <Screen>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Your Orders</div>
-      {orders.length === 0 && <EmptyState icon={ClipboardList} text="No orders yet." />}
-      {orders.map((o) => (
-        <Card key={o.order_id} onClick={() => push("orderDetail", { id: o.order_id })} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700 }}>#{o.order_id} • {o.business_name}</div>
-            <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>₹{o.order_total} • {new Date(o.placed_at).toLocaleDateString()}</div>
-          </div>
-          <Chip tone={o.status === "fulfilled" ? "teal" : ["rejected", "cancelled"].includes(o.status) ? "red" : "gold"}>{o.status}</Chip>
-        </Card>
-      ))}
+      <Loaded q={q}>
+        {(orders) => orders.length === 0 ? <EmptyState icon={ClipboardList} text="No orders yet." /> : orders.map((o) => (
+          <Card key={o.order_id} onClick={() => push("orderDetail", { id: o.order_id })} style={{ marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 700 }}>#{o.order_id} • {o.business_name}</div>
+                <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>₹{o.order_total} • {fmtDate(o.placed_at)}</div>
+              </div>
+              <Chip tone={orderTone(o.status)}>{o.status}</Chip>
+            </div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 7 }}>
+              <DeliveryBadge method={o.delivery_method} />
+              <PaymentChip method={o.payment_method} status={o.payment_status} />
+            </div>
+            {o.scheduled_for && <div style={{ fontSize: 11, color: T.purple, fontWeight: 700, marginTop: 5 }}>Booked: {fmtSlot(o.scheduled_for)}</div>}
+          </Card>
+        ))}
+      </Loaded>
     </Screen>
   );
 }
@@ -359,21 +528,24 @@ function OrdersTab({ push }) {
 const ORDER_STEPS = ["placed", "accepted", "fulfilled"];
 const ORDER_STEP_LABEL = { placed: "Placed", accepted: "Accepted", fulfilled: "Fulfilled" };
 
-function OrderDetail({ id, onBack }) {
+function OrderDetail({ id, justPlaced, onBack }) {
   const [data, setData] = useState(null);
+  const [loadErr, setLoadErr] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
   const [error, setError] = useState("");
 
-  const load = () => api.memberOrderDetail(id).then(setData);
+  const load = () => api.memberOrderDetail(id).then(setData).catch((e) => setLoadErr(e.message));
   useEffect(() => { load(); }, [id]);
 
-  if (!data) return <><TopBar title="Order" onBack={onBack} /><LoadingScreen /></>;
+  if (!data) return <><TopBar title="Order" onBack={onBack} />{loadErr ? <Screen><ErrorBanner message={loadErr} /></Screen> : <LoadingScreen />}</>;
   const { order, items } = data;
   const isBad = ["rejected", "cancelled"].includes(order.status);
   const stepIdx = ORDER_STEPS.indexOf(order.status);
+  const isPickup = order.delivery_method === "pickup";
+  const showUpi = order.payment_method === "upi" && order.payment_status !== "paid" && !isBad;
 
   const cancel = async () => {
     if (!window.confirm("Cancel this order?")) return;
@@ -396,6 +568,11 @@ function OrderDetail({ id, onBack }) {
       <TopBar title={`Order #${order.order_id}`} subtitle={order.business_name} onBack={onBack} />
       <Screen>
         <ErrorBanner message={error} />
+        {justPlaced && !isBad && (
+          <div style={{ background: T.greenLight, color: T.green, padding: "9px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
+            Order placed!{showUpi ? " Complete your UPI payment below." : ""}
+          </div>
+        )}
         {isBad ? (
           <Card style={{ marginBottom: 16, background: T.redLight, borderColor: T.redLight }}>
             <div style={{ color: T.red, fontWeight: 700, fontSize: 13 }}>
@@ -416,14 +593,45 @@ function OrderDetail({ id, onBack }) {
         )}
 
         <Card style={{ marginBottom: 10, background: T.tealLight, borderColor: T.tealLight }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: T.teal, marginBottom: 4 }}>DELIVER TO</div>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>{order.delivery_address || "No address provided"}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.teal }}>{isPickup ? "PICK UP AT STORE" : "DELIVER TO"}</div>
+            <DeliveryBadge method={order.delivery_method} />
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{isPickup ? order.delivery_address || "Pickup at store" : order.delivery_address || "No address provided"}</div>
+          {order.delivery_phone && <div style={{ fontSize: 12, color: T.inkSoft, marginTop: 4 }}>Contact: {order.delivery_phone}</div>}
+          {order.retailer_phone && (
+            <a href={`tel:${order.retailer_phone}`} style={{ fontSize: 12, color: T.teal, fontWeight: 700, marginTop: 6, display: "flex", alignItems: "center", gap: 5, textDecoration: "none" }}>
+              <Phone size={12} /> Call shop: {order.retailer_phone}
+            </a>
+          )}
         </Card>
+
+        {order.scheduled_for && (
+          <Card style={{ marginBottom: 10, background: T.purpleLight, borderColor: T.purpleLight }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.purple, marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}><CalendarClock size={12} /> BOOKING SLOT</div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{fmtSlot(order.scheduled_for)}</div>
+          </Card>
+        )}
+
+        {order.order_notes && (
+          <Card style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.inkSoft, marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}><StickyNote size={12} /> YOUR NOTES</div>
+            <div style={{ fontSize: 12.5 }}>{order.order_notes}</div>
+          </Card>
+        )}
+
+        {showUpi && <UpiPayBlock order={order} upiId={order.retailer_upi_id} businessName={order.business_name} onSubmitted={load} />}
+        {!showUpi && (
+          <Card style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: T.inkSoft }}>PAYMENT</span>
+            <PaymentChip method={order.payment_method} status={order.payment_status} />
+          </Card>
+        )}
 
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Items</div>
         {items.map((i) => (
           <Card key={i.order_item_id} style={{ marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12.5 }}>{i.name} × {i.quantity}</span>
+            <span style={{ fontSize: 12.5 }}>{i.name} × {i.quantity} {i.item_type === "service" && <Chip tone="purple">Service</Chip>}</span>
             <span style={{ fontSize: 12.5, fontWeight: 700 }}>₹{i.line_total}</span>
           </Card>
         ))}
@@ -450,6 +658,38 @@ function OrderDetail({ id, onBack }) {
         {order.status === "fulfilled" && order.reviewed && (
           <div style={{ fontSize: 12, color: T.inkSoft, textAlign: "center" }}>You've already reviewed this order. Thanks!</div>
         )}
+      </Screen>
+    </>
+  );
+}
+
+const TXN_TONE = { paid: "green", verified: "green", pending: "gold", submitted: "blue", rejected: "red", cancelled: "red" };
+
+function TransactionsScreen({ onBack, onOpenOrder }) {
+  const q = useLoad(() => api.memberTransactions(), []);
+  return (
+    <>
+      <TopBar title="Payment History" subtitle="Memberships & orders" onBack={onBack} />
+      <Screen>
+        <Loaded q={q}>
+          {(rows) => rows.length === 0 ? <EmptyState icon={Receipt} text="No payments yet." /> : rows.map((t) => (
+            <Card key={`${t.kind}-${t.id}`} onClick={t.kind === "order" ? () => onOpenOrder(t.id) : undefined} style={{ marginBottom: 8, cursor: t.kind === "order" ? "pointer" : "default" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: T.inkSoft, marginTop: 2 }}>
+                    {fmtDateTime(t.date)}{t.method ? ` • ${String(t.method).toUpperCase()}` : ""}
+                  </div>
+                  {t.reference && <div style={{ fontSize: 10.5, color: T.inkSoft, marginTop: 2 }}>Ref: {t.reference}</div>}
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: T.teal }}>{inr(t.amount)}</div>
+                  <div style={{ marginTop: 4 }}><Chip tone={TXN_TONE[t.status] || "gray"}>{t.status}</Chip></div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </Loaded>
       </Screen>
     </>
   );
@@ -591,7 +831,7 @@ function BuyPlan({ onBack, onDone }) {
 }
 
 
-function ProfileTab({ user, roles, push, onLogout }) {
+function ProfileTab({ user, roles, push, onLogout, onUserChanged }) {
   const [membership, setMembership] = useState(undefined);
   const [referrals, setReferrals] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -646,6 +886,8 @@ function ProfileTab({ user, roles, push, onLogout }) {
           </div>
         </Card>
       )}
+      <EmailCard onSaved={onUserChanged} />
+      <Btn full variant="ghost" onClick={() => push("transactions")} style={{ marginBottom: 8 }}><Receipt size={13} /> Payment history</Btn>
       <Btn full variant="ghost" onClick={() => push("complaint")} style={{ marginBottom: 8 }}><AlertCircle size={13} /> Raise a complaint</Btn>
       {!roles.includes("retailer") && (
         <Btn full variant="ghost" onClick={() => push("becomeRetailer")} style={{ marginBottom: 8 }}>

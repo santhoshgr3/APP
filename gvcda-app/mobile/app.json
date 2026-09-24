@@ -17,7 +17,7 @@
     "android": {
       "package": "com.gvcdaservicehub.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -45,6 +45,15 @@
         {
           "icon": "./assets/icon.png",
           "color": "#0E5E5C"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#FFFFFF",
+          "imageWidth": 240,
+          "resizeMode": "contain"
         }
       ]
     ],

@@ -5,6 +5,7 @@ import { Screen, Card, Btn, LoadingScreen, ChangePasswordCard } from "../../comp
 import { api } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import RoleSwitcherCard from "../../components/RoleSwitcherCard";
+import EmailCard from "../../components/EmailCard";
 import { T } from "../../theme";
 
 // Screen Spec 1.10 — utility hub: account, membership renewal, complaints, help.
@@ -40,6 +41,7 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </Card>
 
+      <EmailCard />
       <RoleSwitcherCard />
 
       {membership === undefined && <LoadingScreen text="" />}
@@ -71,6 +73,9 @@ export default function ProfileScreen({ navigation }) {
       )}
       <Btn full variant="ghost" icon="credit-card" style={{ marginBottom: 8 }} onPress={() => navigation.navigate("DigitalCard")}>
         Digital membership card
+      </Btn>
+      <Btn full variant="ghost" icon="list" style={{ marginBottom: 8 }} onPress={() => navigation.navigate("Transactions")}>
+        Payment history
       </Btn>
       <Btn full variant="ghost" icon="alert-circle" style={{ marginBottom: 8 }} onPress={() => navigation.navigate("Complaint")}>
         Raise a complaint

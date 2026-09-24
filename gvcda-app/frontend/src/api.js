@@ -46,11 +46,19 @@ export function photoUrl(filename) {
 
 export const api = {
   // auth
-  register: (phone, password, full_name, referral_code) => request("/auth/register", { method: "POST", body: { phone, password, full_name, referral_code }, auth: false }),
+  register: (phone, password, full_name, referral_code, email) => request("/auth/register", { method: "POST", body: { phone, password, full_name, referral_code, email }, auth: false }),
   login: (phone, password) => request("/auth/login", { method: "POST", body: { phone, password }, auth: false }),
   me: () => request("/auth/me"),
   switchRole: (role) => request("/auth/switch-role", { method: "POST", body: { role } }),
   changePassword: (current_password, new_password) => request("/auth/change-password", { method: "POST", body: { current_password, new_password } }),
+
+  updateEmail: (email) => request("/auth/email", { method: "PATCH", body: { email } }),
+  uploadProfilePhoto: (file) => {
+    const fd = new FormData();
+    fd.append("photo", file);
+    return requestForm("/auth/photo", fd);
+  },
+  deleteProfilePhoto: () => request("/auth/photo", { method: "DELETE" }),
 
   // locations
   districts: () => request("/locations/districts", { auth: false }),
@@ -72,8 +80,11 @@ export const api = {
     return request(`/member/retailers${qs ? "?" + qs : ""}`);
   },
   memberRetailerDetail: (id) => request(`/member/retailers/${id}`),
-  placeOrder: (retailer_id, items, delivery_address, delivery_phone) =>
-    request("/member/orders", { method: "POST", body: { retailer_id, items, delivery_address, delivery_phone } }),
+  // options: { delivery_method, payment_method, scheduled_for, order_notes }
+  placeOrder: (retailer_id, items, delivery_address, delivery_phone, options = {}) =>
+    request("/member/orders", { method: "POST", body: { retailer_id, items, delivery_address, delivery_phone, ...options } }),
+  submitOrderPayment: (id, utr) => request(`/member/orders/${id}/payment`, { method: "PATCH", body: { utr } }),
+  memberTransactions: () => request("/member/transactions"),
   memberOrders: () => request("/member/orders"),
   memberJobs: () => request("/member/jobs"),
   applyJob: (id) => request(`/member/jobs/${id}/apply`, { method: "POST" }),
@@ -94,18 +105,36 @@ export const api = {
   employeeIncentives: () => request("/employee/incentives"),
   employeeVisits: () => request("/employee/visits"),
   logVisit: (payload) => request("/employee/visits", { method: "POST", body: payload }),
+  employeeAttendance: (month) => request(`/employee/attendance${month ? "?month=" + month : ""}`),
+  checkIn: (coords = {}) => request("/employee/attendance/check-in", { method: "POST", body: coords }),
+  checkOut: (coords = {}) => request("/employee/attendance/check-out", { method: "POST", body: coords }),
+  employeeLeaves: () => request("/employee/leaves"),
+  requestLeave: (payload) => request("/employee/leaves", { method: "POST", body: payload }),
+  withdrawLeave: (id) => request(`/employee/leaves/${id}`, { method: "DELETE" }),
+  employeeTasks: () => request("/employee/tasks"),
+  updateTaskStatus: (id, status) => request(`/employee/tasks/${id}`, { method: "PATCH", body: { status } }),
+  employeeSalary: () => request("/employee/salary"),
+  employeeSupport: () => request("/employee/support"),
+  createEmployeeSupport: (category, description) => request("/employee/support", { method: "POST", body: { category, description } }),
 
   // retailer
   retailerRegister: (payload) => request("/retailer/register", { method: "POST", body: payload }),
   retailerMe: () => request("/retailer/me"),
   retailerBroadcasts: () => request("/retailer/broadcasts"),
   retailerProducts: () => request("/retailer/products"),
-  addProduct: (name, price) => request("/retailer/products", { method: "POST", body: { name, price } }),
+  addProduct: (name, price, extra = {}) => request("/retailer/products", { method: "POST", body: { name, price, ...extra } }),
   updateProduct: (id, payload) => request(`/retailer/products/${id}`, { method: "PATCH", body: payload }),
   deleteProduct: (id) => request(`/retailer/products/${id}`, { method: "DELETE" }),
   retailerOrders: (status) => request(`/retailer/orders${status ? "?status=" + status : ""}`),
   retailerOrderDetail: (id) => request(`/retailer/orders/${id}`),
   updateOrderStatus: (id, status) => request(`/retailer/orders/${id}`, { method: "PATCH", body: { status } }),
+  updateOrderPayment: (id, received) => request(`/retailer/orders/${id}/payment`, { method: "PATCH", body: { received } }),
+  retailerCustomers: () => request("/retailer/customers"),
+  retailerCustomerDetail: (memberId) => request(`/retailer/customers/${memberId}`),
+  retailerReports: (from, to) => request(`/retailer/reports?from=${from}&to=${to}`),
+  retailerStock: () => request("/retailer/stock"),
+  retailerSupport: () => request("/retailer/support"),
+  createRetailerSupport: (category, description) => request("/retailer/support", { method: "POST", body: { category, description } }),
   retailerEarnings: () => request("/retailer/earnings"),
   retailerEarningsTrend: (days = 30) => request(`/retailer/earnings/trend?days=${days}`),
   retailerReviews: () => request("/retailer/reviews"),
@@ -150,6 +179,20 @@ export const api = {
     return request(`/admin/payment-requests${qs ? "?" + qs : ""}`);
   },
   resolvePaymentRequest: (id, approve, reason) => request(`/admin/payment-requests/${id}`, { method: "PATCH", body: { approve, reason } }),
+  updateEmployee: (id, payload) => request(`/admin/employees/${id}`, { method: "PATCH", body: payload }),
+  adminTasks: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/admin/tasks${qs ? "?" + qs : ""}`);
+  },
+  createAdminTask: (payload) => request("/admin/tasks", { method: "POST", body: payload }),
+  deleteAdminTask: (id) => request(`/admin/tasks/${id}`, { method: "DELETE" }),
+  adminAttendance: (date) => request(`/admin/attendance${date ? "?date=" + date : ""}`),
+  adminLeaves: (status) => request(`/admin/leaves${status ? "?status=" + status : ""}`),
+  decideLeave: (id, status, note) => request(`/admin/leaves/${id}`, { method: "PATCH", body: { status, note } }),
+  salaryPreview: (employee_id, month) => request(`/admin/salary-preview?employee_id=${employee_id}&month=${month}`),
+  recordSalaryPayment: (payload) => request("/admin/salary-payments", { method: "POST", body: payload }),
+  salaryPayments: (month) => request(`/admin/salary-payments${month ? "?month=" + month : ""}`),
+  gvcdaDeliveries: () => request("/admin/gvcda-deliveries"),
   toggleUser: (id, is_active) => request(`/admin/users/${id}`, { method: "PATCH", body: { is_active } }),
 };
 

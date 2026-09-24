@@ -101,8 +101,11 @@ export function photoUrl(filename) {
 
 export const api = {
   // auth
-  register: (phone, password, full_name, referral_code) =>
-    request("/auth/register", { method: "POST", body: { phone, password, full_name, referral_code }, auth: false }),
+  register: (phone, password, full_name, referral_code, email) =>
+    request("/auth/register", { method: "POST", body: { phone, password, full_name, referral_code, email: email || undefined }, auth: false }),
+  updateEmail: (email) => request("/auth/email", { method: "PATCH", body: { email } }),
+  uploadProfilePhoto: (asset) => requestUpload("/auth/photo", "photo", [asset]),
+  deleteProfilePhoto: () => request("/auth/photo", { method: "DELETE" }),
   login: (phone, password) => request("/auth/login", { method: "POST", body: { phone, password }, auth: false }),
   me: () => request("/auth/me"),
   switchRole: (role) => request("/auth/switch-role", { method: "POST", body: { role } }),
@@ -128,8 +131,19 @@ export const api = {
     return request(`/member/retailers${qs ? "?" + qs : ""}`);
   },
   memberRetailerDetail: (id) => request(`/member/retailers/${id}`),
-  placeOrder: (retailer_id, items, delivery_address, delivery_phone) =>
-    request("/member/orders", { method: "POST", body: { retailer_id, items, delivery_address, delivery_phone } }),
+  placeOrder: (retailer_id, items, delivery_address, delivery_phone, options = {}) =>
+    request("/member/orders", {
+      method: "POST",
+      body: {
+        retailer_id, items, delivery_address, delivery_phone,
+        delivery_method: options.delivery_method,
+        payment_method: options.payment_method,
+        scheduled_for: options.scheduled_for || undefined,
+        order_notes: options.order_notes || undefined,
+      },
+    }),
+  submitOrderPayment: (id, utr) => request(`/member/orders/${id}/payment`, { method: "PATCH", body: { utr } }),
+  memberTransactions: () => request("/member/transactions"),
   memberOrders: () => request("/member/orders"),
   memberOrderDetail: (id) => request(`/member/orders/${id}`),
   cancelOrder: (id) => request(`/member/orders/${id}/cancel`, { method: "PATCH" }),
@@ -151,13 +165,24 @@ export const api = {
   employeeIncentives: () => request("/employee/incentives"),
   employeeVisits: () => request("/employee/visits"),
   logVisit: (payload) => request("/employee/visits", { method: "POST", body: payload }),
+  employeeAttendance: (month) => request(`/employee/attendance${month ? "?month=" + month : ""}`),
+  attendanceCheckIn: (coords = {}) => request("/employee/attendance/check-in", { method: "POST", body: coords }),
+  attendanceCheckOut: (coords = {}) => request("/employee/attendance/check-out", { method: "POST", body: coords }),
+  employeeLeaves: () => request("/employee/leaves"),
+  requestLeave: (payload) => request("/employee/leaves", { method: "POST", body: payload }),
+  withdrawLeave: (id) => request(`/employee/leaves/${id}`, { method: "DELETE" }),
+  employeeTasks: () => request("/employee/tasks"),
+  updateTaskStatus: (id, status) => request(`/employee/tasks/${id}`, { method: "PATCH", body: { status } }),
+  employeeSalary: () => request("/employee/salary"),
+  employeeSupport: () => request("/employee/support"),
+  createEmployeeSupport: (category, description) => request("/employee/support", { method: "POST", body: { category, description } }),
 
   // retailer
   retailerRegister: (payload) => request("/retailer/register", { method: "POST", body: payload }),
   retailerMe: () => request("/retailer/me"),
   retailerBroadcasts: () => request("/retailer/broadcasts"),
   retailerProducts: () => request("/retailer/products"),
-  addProduct: (name, price) => request("/retailer/products", { method: "POST", body: { name, price } }),
+  addProduct: (name, price, extra = {}) => request("/retailer/products", { method: "POST", body: { name, price, ...extra } }),
   updateProduct: (id, payload) => request(`/retailer/products/${id}`, { method: "PATCH", body: payload }),
   deleteProduct: (id) => request(`/retailer/products/${id}`, { method: "DELETE" }),
   retailerOrders: (status) => request(`/retailer/orders${status ? "?status=" + status : ""}`),
@@ -165,6 +190,13 @@ export const api = {
   updateOrderStatus: (id, status) => request(`/retailer/orders/${id}`, { method: "PATCH", body: { status } }),
   retailerEarnings: () => request("/retailer/earnings"),
   retailerEarningsTrend: (days = 14) => request(`/retailer/earnings/trend?days=${days}`),
+  updateRetailerOrderPayment: (id, received) => request(`/retailer/orders/${id}/payment`, { method: "PATCH", body: { received } }),
+  retailerCustomers: () => request("/retailer/customers"),
+  retailerCustomerDetail: (memberId) => request(`/retailer/customers/${memberId}`),
+  retailerReports: (from, to) => request(`/retailer/reports?from=${from}&to=${to}`),
+  retailerStock: () => request("/retailer/stock"),
+  retailerSupport: () => request("/retailer/support"),
+  createRetailerSupport: (category, description) => request("/retailer/support", { method: "POST", body: { category, description } }),
   retailerReviews: () => request("/retailer/reviews"),
   commissionCheckout: () => request("/retailer/commission/checkout", { method: "POST" }),
   submitCommissionUtr: (request_id, utr) => request("/retailer/commission/submit-utr", { method: "POST", body: { request_id, utr } }),
