@@ -5,6 +5,9 @@ const router = express.Router();
 const { get, all, run } = require("../db");
 const { signToken, requireAuth } = require("../middleware/auth");
 const { generateUniqueReferralCode, ensureReferralCode } = require("../lib/referrals");
+const { isEmail } = require("../lib/validate");
+const { sendEmail } = require("../lib/email");
+const { uploadSingleImage, saveFiles, deleteFile } = require("../lib/uploads");
 
 const PHONE_RE = /^\d{10}$/;
 
@@ -37,9 +40,10 @@ const registerLimiter = rateLimit({
 // /retailer/register on top of an existing member login).
 router.post("/register", registerLimiter, async (req, res, next) => {
   try {
-    const { phone, password, full_name, referral_code } = req.body;
+    const { phone, password, full_name, referral_code, email } = req.body;
     if (!phone || !PHONE_RE.test(phone)) return res.status(400).json({ error: "Valid 10-digit phone number required" });
     if (!password || password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (email && !isEmail(email)) return res.status(400).json({ error: "Enter a valid email address" });
 
     const existing = await get("SELECT 1 FROM users WHERE phone = ?", [phone]);
     if (existing) return res.status(409).json({ error: "An account with this phone number already exists — log in instead" });
@@ -54,11 +58,12 @@ router.post("/register", registerLimiter, async (req, res, next) => {
     const password_hash = await bcrypt.hash(password, 10);
     const myReferralCode = await generateUniqueReferralCode();
     const result = await run(
-      "INSERT INTO users (phone, password_hash, full_name, role, referred_by, referral_code) VALUES (?, ?, ?, 'member', ?, ?) RETURNING user_id",
-      [phone, password_hash, full_name || "New Member", referredBy, myReferralCode]
+      "INSERT INTO users (phone, password_hash, full_name, role, referred_by, referral_code, email) VALUES (?, ?, ?, 'member', ?, ?, ?) RETURNING user_id",
+      [phone, password_hash, full_name || "New Member", referredBy, myReferralCode, email ? email.trim().toLowerCase() : null]
     );
     const user = await get("SELECT * FROM users WHERE user_id = ?", [result.lastInsertRowid]);
     await run("INSERT INTO user_roles (user_id, role) VALUES (?, 'member') ON CONFLICT DO NOTHING", [user.user_id]);
+    if (user.email) sendEmail(user.email, "Welcome to GVCDA", `Hi ${user.full_name}, your GVCDA account is ready. Log in with your mobile number ${phone}. Your referral code: ${myReferralCode}.`);
 
     const token = signToken(user);
     res.json({ token, user, is_new_user: true, roles: ["member"] });
@@ -107,6 +112,39 @@ router.post("/push-token", requireAuth, async (req, res, next) => {
     if (!token) return res.status(400).json({ error: "token required" });
     await run("UPDATE users SET push_token = ? WHERE user_id = ?", [token, req.auth.user_id]);
     res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// PATCH /auth/email { email } — any role can add/change (or clear, with "") their email.
+router.patch("/email", requireAuth, async (req, res, next) => {
+  try {
+    const email = (req.body.email || "").trim();
+    if (email && !isEmail(email)) return res.status(400).json({ error: "Enter a valid email address" });
+    await run("UPDATE users SET email = ? WHERE user_id = ?", [email ? email.toLowerCase() : null, req.auth.user_id]);
+    res.json({ user: await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]) });
+  } catch (e) { next(e); }
+});
+
+// POST /auth/photo — multipart, field "photo". Profile picture for any role (shown on the
+// employee ID card). Replaces the previous one.
+router.post("/photo", requireAuth, uploadSingleImage.single("photo"), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No photo uploaded" });
+    const before = await get("SELECT photo_filename FROM users WHERE user_id = ?", [req.auth.user_id]);
+    const [url] = await saveFiles([req.file]);
+    await run("UPDATE users SET photo_filename = ? WHERE user_id = ?", [url, req.auth.user_id]);
+    if (before?.photo_filename) deleteFile(before.photo_filename);
+    res.json({ user: await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]) });
+  } catch (e) { next(e); }
+});
+
+// DELETE /auth/photo
+router.delete("/photo", requireAuth, async (req, res, next) => {
+  try {
+    const before = await get("SELECT photo_filename FROM users WHERE user_id = ?", [req.auth.user_id]);
+    await run("UPDATE users SET photo_filename = NULL WHERE user_id = ?", [req.auth.user_id]);
+    if (before?.photo_filename) deleteFile(before.photo_filename);
+    res.json({ user: await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]) });
   } catch (e) { next(e); }
 });
 

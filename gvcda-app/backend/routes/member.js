@@ -4,8 +4,11 @@ const { get, all, run } = require("../db");
 const { requireAuth } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
 const broadcasts = require("../lib/broadcasts");
-const { sendPush } = require("../lib/push");
 const { recomputeRating } = require("../lib/reviews");
+const { notifyUser } = require("../lib/notify");
+const { publicRetailer, parseDeliveryMethods } = require("../lib/retailerPublic");
+const { isEmail, parseIstDateTime } = require("../lib/validate");
+const { restockOrder } = require("../lib/inventory");
 
 router.use(requireAuth); // every route below requires a logged-in user
 
@@ -14,18 +17,20 @@ router.get("/broadcasts", async (req, res, next) => {
   try { res.json(await broadcasts.getVisibleBroadcasts(req.auth.user_id)); } catch (e) { next(e); }
 });
 
-// PATCH /member/profile { full_name, village_id, age, gender, address }
+// PATCH /member/profile { full_name, village_id, age, gender, address, email }
 router.patch("/profile", async (req, res, next) => {
   try {
-    const { full_name, village_id, age, gender, address } = req.body;
+    const { full_name, village_id, age, gender, address, email } = req.body;
     if (age !== undefined && age !== null && !(Number.isInteger(Number(age)) && age >= 1 && age <= 120)) {
       return res.status(400).json({ error: "Age must be a whole number between 1 and 120" });
     }
+    if (email && !isEmail(email)) return res.status(400).json({ error: "Enter a valid email address" });
     await run(
       `UPDATE users SET full_name = COALESCE(?, full_name), village_id = COALESCE(?, village_id),
-       age = COALESCE(?, age), gender = COALESCE(?, gender), address = COALESCE(?, address)
+       age = COALESCE(?, age), gender = COALESCE(?, gender), address = COALESCE(?, address),
+       email = COALESCE(?, email)
        WHERE user_id = ?`,
-      [full_name, village_id, age || null, gender || null, address || null, req.auth.user_id]
+      [full_name, village_id, age || null, gender || null, address || null, email ? email.trim().toLowerCase() : null, req.auth.user_id]
     );
     const user = await get("SELECT * FROM users WHERE user_id = ?", [req.auth.user_id]);
     res.json({ user });
@@ -108,7 +113,7 @@ router.get("/home", async (req, res, next) => {
         [user.village_id]
       );
     }
-    res.json({ user, categories, nearby });
+    res.json({ user, categories, nearby: nearby.map(publicRetailer) });
   } catch (e) { next(e); }
 });
 
@@ -130,7 +135,7 @@ router.get("/retailers", async (req, res, next) => {
     if (category_id) { sql += " AND r.category_id = ?"; params.push(category_id); }
     if (q && q.trim()) { sql += " AND r.business_name ILIKE ?"; params.push(`%${q.trim()}%`); }
 
-    res.json(await all(sql, params));
+    res.json((await all(sql, params)).map(publicRetailer));
   } catch (e) { next(e); }
 });
 
@@ -157,30 +162,76 @@ router.get("/retailers/:id", async (req, res, next) => {
        WHERE rv.retailer_id = ? ORDER BY rv.created_at DESC LIMIT 20`,
       [req.params.id]
     );
-    res.json({ retailer, products, promotions, photos, reviews });
+    res.json({ retailer: publicRetailer(retailer), products, promotions, photos, reviews });
   } catch (e) { next(e); }
 });
 
-// POST /member/orders { retailer_id, items: [{product_id, quantity}], delivery_address, delivery_phone? }
+// POST /member/orders
+// { retailer_id, items: [{product_id, quantity}],
+//   delivery_method?: pickup|self_delivery|gvcda_delivery,   (default: the retailer's first offered)
+//   delivery_address (required unless pickup), delivery_phone?,
+//   payment_method?: cod|upi                                 (default cod; upi needs the retailer to have a UPI ID)
+//   scheduled_for? (required when the cart contains a service — the slot the customer wants),
+//   order_notes? }
 router.post("/orders", async (req, res, next) => {
+  const reserved = []; // [{product_id, quantity}] stock we've already taken, so a later failure can give it back
   try {
-    const { retailer_id, items, delivery_address, delivery_phone } = req.body;
-    if (!delivery_address || !delivery_address.trim()) return res.status(400).json({ error: "Delivery address is required" });
+    const { retailer_id, items, delivery_address, delivery_phone, delivery_method, payment_method, scheduled_for, order_notes } = req.body;
     const retailer = await get("SELECT * FROM retailers WHERE retailer_id = ? AND status = 'approved'", [retailer_id]);
     if (!retailer) return res.status(404).json({ error: "Retailer not found or not approved" });
     if (!items || !items.length) return res.status(400).json({ error: "Order must have at least one item" });
 
-    let total = 0;
-    const lineItems = [];
+    const offered = parseDeliveryMethods(retailer.delivery_methods);
+    const method = delivery_method || (offered.includes("self_delivery") ? "self_delivery" : offered[0]);
+    if (!offered.includes(method)) return res.status(400).json({ error: "This retailer doesn't offer that delivery option" });
+    const address = (delivery_address || "").trim() || (method === "pickup" ? "Pickup at store" : "");
+    if (!address) return res.status(400).json({ error: "Delivery address is required" });
+
+    const pm = payment_method || "cod";
+    if (!["cod", "upi"].includes(pm)) return res.status(400).json({ error: "Invalid payment method" });
+    if (pm === "upi" && !retailer.upi_id) return res.status(400).json({ error: "This retailer doesn't accept UPI payments — choose Cash on Delivery" });
+
+    // Merge repeated lines for the same product so stock is checked against the real total.
+    const wanted = new Map();
     for (const i of items) {
       const quantity = Number(i.quantity);
       if (!Number.isInteger(quantity) || quantity < 1) return res.status(400).json({ error: "Item quantity must be a positive whole number" });
-      const product = await get("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?", [i.product_id, retailer_id]);
+      wanted.set(Number(i.product_id), (wanted.get(Number(i.product_id)) || 0) + quantity);
+    }
+
+    let total = 0;
+    let hasService = false;
+    const lineItems = [];
+    for (const [productId, quantity] of wanted) {
+      const product = await get("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?", [productId, retailer_id]);
       if (!product) return res.status(400).json({ error: "Invalid product in order" });
       if (!product.is_available) return res.status(400).json({ error: `${product.name} is currently unavailable` });
+      if (product.item_type === "service") hasService = true;
       const lineTotal = product.price * quantity;
       total += lineTotal;
-      lineItems.push({ product_id: product.product_id, quantity, unit_price: product.price, line_total: lineTotal });
+      lineItems.push({ product, quantity, unit_price: product.price, line_total: lineTotal });
+    }
+
+    let scheduled = null;
+    if (hasService) {
+      const at = parseIstDateTime(scheduled_for);
+      if (Number.isNaN(at) || at <= Date.now()) return res.status(400).json({ error: "Choose a future date and time for the service booking" });
+      scheduled = scheduled_for.trim();
+    }
+
+    // Take stock atomically: the WHERE stock >= qty means two people can never both buy the last unit.
+    for (const li of lineItems) {
+      if (li.product.stock === null || li.product.stock === undefined) continue;
+      const r = await run(
+        "UPDATE products SET stock = stock - ? WHERE product_id = ? AND stock IS NOT NULL AND stock >= ?",
+        [li.quantity, li.product.product_id, li.quantity]
+      );
+      if (r.changes === 0) {
+        const fresh = await get("SELECT stock FROM products WHERE product_id = ?", [li.product.product_id]);
+        for (const x of reserved) await run("UPDATE products SET stock = stock + ? WHERE product_id = ? AND stock IS NOT NULL", [x.quantity, x.product_id]);
+        return res.status(400).json({ error: fresh?.stock > 0 ? `Only ${fresh.stock} of ${li.product.name} left` : `${li.product.name} is out of stock` });
+      }
+      reserved.push({ product_id: li.product.product_id, quantity: li.quantity });
     }
 
     const commissionPct = retailer.commission_pct;
@@ -196,26 +247,31 @@ router.post("/orders", async (req, res, next) => {
     }
 
     const orderResult = await run(
-      `INSERT INTO orders (member_id, retailer_id, order_total, commission_pct, commission_amt, payout_amt, delivery_address, delivery_phone)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING order_id`,
-      [req.auth.user_id, retailer_id, total, commissionPct, commissionAmt, payoutAmt, delivery_address.trim(), phone]
+      `INSERT INTO orders (member_id, retailer_id, order_total, commission_pct, commission_amt, payout_amt,
+                           delivery_address, delivery_phone, delivery_method, payment_method, scheduled_for, order_notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING order_id`,
+      [req.auth.user_id, retailer_id, total, commissionPct, commissionAmt, payoutAmt, address, phone, method, pm, scheduled, order_notes ? String(order_notes).trim().slice(0, 500) : null]
     );
 
     for (const li of lineItems) {
       await run(
         "INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total) VALUES (?, ?, ?, ?, ?)",
-        [orderResult.lastInsertRowid, li.product_id, li.quantity, li.unit_price, li.line_total]
+        [orderResult.lastInsertRowid, li.product.product_id, li.quantity, li.unit_price, li.line_total]
       );
     }
 
     const order = await get("SELECT * FROM orders WHERE order_id = ?", [orderResult.lastInsertRowid]);
-
-    get("SELECT push_token FROM users WHERE user_id = ?", [retailer.user_id])
-      .then((u) => sendPush([u?.push_token], { title: "New order!", body: `Order #${order.order_id} — ₹${total}`, data: { type: "new_order", order_id: order.order_id } }))
-      .catch((e) => console.error("New-order push failed:", e.message));
+    notifyUser(retailer.user_id, {
+      title: hasService ? "New booking!" : "New order!",
+      body: `Order #${order.order_id} — ₹${total}${scheduled ? ` for ${scheduled.replace("T", " ")}` : ""}`,
+      data: { type: "new_order", order_id: order.order_id },
+    });
 
     res.json({ order });
-  } catch (e) { next(e); }
+  } catch (e) {
+    for (const x of reserved) await run("UPDATE products SET stock = stock + ? WHERE product_id = ? AND stock IS NOT NULL", [x.quantity, x.product_id]).catch(() => {});
+    next(e);
+  }
 });
 
 // PATCH /member/orders/:id/cancel — only while the retailer hasn't acted on it yet.
@@ -225,7 +281,73 @@ router.patch("/orders/:id/cancel", async (req, res, next) => {
     if (!order) return res.status(404).json({ error: "Order not found" });
     if (order.status !== "placed") return res.status(400).json({ error: "This order can no longer be cancelled" });
     await run("UPDATE orders SET status = 'cancelled' WHERE order_id = ?", [order.order_id]);
+    await restockOrder(order.order_id);
+    const retailer = await get("SELECT user_id FROM retailers WHERE retailer_id = ?", [order.retailer_id]);
+    if (retailer) notifyUser(retailer.user_id, { title: "Order cancelled", body: `Order #${order.order_id} was cancelled by the customer.`, data: { type: "order_status", order_id: order.order_id } });
     res.json({ order: await get("SELECT * FROM orders WHERE order_id = ?", [order.order_id]) });
+  } catch (e) { next(e); }
+});
+
+// PATCH /member/orders/:id/payment { utr } — for UPI orders: after paying the retailer
+// directly, the member reports the UTR so the retailer can match it against their
+// own bank/UPI app and confirm receipt.
+router.patch("/orders/:id/payment", async (req, res, next) => {
+  try {
+    const { utr } = req.body;
+    if (!utr || !String(utr).trim()) return res.status(400).json({ error: "UTR / transaction reference is required" });
+    const order = await get("SELECT * FROM orders WHERE order_id = ? AND member_id = ?", [req.params.id, req.auth.user_id]);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.payment_method !== "upi") return res.status(400).json({ error: "This is a Cash on Delivery order" });
+    if (["cancelled", "rejected"].includes(order.status)) return res.status(400).json({ error: "This order is closed" });
+    if (order.payment_status === "paid") return res.status(400).json({ error: "This payment is already confirmed" });
+
+    await run("UPDATE orders SET payment_utr = ?, payment_status = 'submitted' WHERE order_id = ?", [String(utr).trim(), order.order_id]);
+    const retailer = await get("SELECT user_id FROM retailers WHERE retailer_id = ?", [order.retailer_id]);
+    if (retailer) notifyUser(retailer.user_id, { title: "Payment submitted", body: `Order #${order.order_id}: customer paid via UPI (UTR ${String(utr).trim()}). Please confirm.`, data: { type: "order_payment", order_id: order.order_id } });
+    res.json({ order: await get("SELECT * FROM orders WHERE order_id = ?", [order.order_id]) });
+  } catch (e) { next(e); }
+});
+
+// GET /member/transactions — one payment history: membership fees + order payments, newest first.
+router.get("/transactions", async (req, res, next) => {
+  try {
+    const memberships = await all(
+      `SELECT pr.request_id, pr.amount, pr.status, pr.reference_code, pr.utr, pr.created_at, mp.name as label
+       FROM payment_requests pr LEFT JOIN membership_plans mp ON mp.plan_id = pr.plan_id
+       WHERE pr.type = 'membership' AND pr.user_id = ?`,
+      [req.auth.user_id]
+    );
+    // Memberships an employee sold in the field (cash/UPI collected in person) have no
+    // payment_request row, only the membership itself — include them so the history is complete.
+    const fieldMemberships = await all(
+      `SELECT m.membership_id, m.amount_paid, m.created_at, mp.name as label
+       FROM memberships m JOIN membership_plans mp ON mp.plan_id = m.plan_id
+       WHERE m.user_id = ? AND m.payment_ref IS NULL`,
+      [req.auth.user_id]
+    );
+    const orders = await all(
+      `SELECT o.order_id, o.order_total, o.payment_method, o.payment_status, o.payment_utr, o.status, o.placed_at, r.business_name
+       FROM orders o JOIN retailers r ON r.retailer_id = o.retailer_id WHERE o.member_id = ?`,
+      [req.auth.user_id]
+    );
+    const rows = [
+      ...fieldMemberships.map((m) => ({
+        kind: "membership", id: `m${m.membership_id}`, title: `${m.label} plan`, amount: m.amount_paid,
+        method: "Paid to GVCDA field agent", status: "paid", reference: null, date: m.created_at,
+      })),
+      ...memberships.map((m) => ({
+        kind: "membership", id: m.request_id, title: `${m.label || "Membership"} plan`, amount: m.amount,
+        method: "Bank / UPI transfer", status: m.status === "verified" ? "paid" : m.status, reference: m.utr || m.reference_code, date: m.created_at,
+      })),
+      ...orders.map((o) => ({
+        kind: "order", id: o.order_id, title: `Order #${o.order_id} — ${o.business_name}`, amount: o.order_total,
+        method: o.payment_method === "upi" ? "UPI" : "Cash on Delivery",
+        // COD money changes hands on delivery, so it only counts as paid once fulfilled.
+        status: ["cancelled", "rejected"].includes(o.status) ? "cancelled" : o.payment_method === "cod" ? (o.status === "fulfilled" ? "paid" : "pending") : o.payment_status,
+        reference: o.payment_utr, date: o.placed_at,
+      })),
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+    res.json(rows);
   } catch (e) { next(e); }
 });
 
@@ -319,7 +441,7 @@ router.get("/complaints", async (req, res, next) => {
 router.get("/orders/:id", async (req, res, next) => {
   try {
     const order = await get(
-      `SELECT o.*, r.business_name,
+      `SELECT o.*, r.business_name, r.upi_id as retailer_upi_id, r.phone as retailer_phone,
               EXISTS(SELECT 1 FROM reviews WHERE order_id = o.order_id) as reviewed
        FROM orders o JOIN retailers r ON r.retailer_id = o.retailer_id
        WHERE o.order_id = ? AND o.member_id = ?`,
@@ -327,7 +449,7 @@ router.get("/orders/:id", async (req, res, next) => {
     );
     if (!order) return res.status(404).json({ error: "Order not found" });
     const items = await all(
-      `SELECT oi.*, p.name FROM order_items oi JOIN products p ON p.product_id = oi.product_id WHERE oi.order_id = ?`,
+      `SELECT oi.*, p.name, p.item_type FROM order_items oi JOIN products p ON p.product_id = oi.product_id WHERE oi.order_id = ?`,
       [order.order_id]
     );
     res.json({ order, items });

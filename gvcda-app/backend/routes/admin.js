@@ -6,6 +6,9 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
 const { getRecipientPushTokens } = require("../lib/broadcasts");
 const { sendPush } = require("../lib/push");
+const { notifyUser } = require("../lib/notify");
+const { monthlyIncentive, employeeCode } = require("../lib/employees");
+const { isDate, isEmail, MONTH_RE } = require("../lib/validate");
 
 router.use(requireAuth, requireRole("admin"));
 
@@ -73,7 +76,7 @@ router.get("/territory", async (req, res, next) => {
 router.get("/employees", async (req, res, next) => {
   try {
     const rows = await all(
-      `SELECT u.user_id, u.full_name, u.designation,
+      `SELECT u.user_id, u.full_name, u.phone, u.designation, u.monthly_target, u.monthly_salary,
               COUNT(DISTINCT mem.membership_id) as memberships_sold,
               COUNT(DISTINCT r.retailer_id) as retailers_onboarded
        FROM users u
@@ -82,7 +85,185 @@ router.get("/employees", async (req, res, next) => {
        WHERE u.role = 'employee'
        GROUP BY u.user_id ORDER BY memberships_sold DESC`
     );
-    res.json(rows);
+    res.json(rows.map((r) => ({ ...r, employee_code: employeeCode(r.user_id) })));
+  } catch (e) { next(e); }
+});
+
+// PATCH /admin/employees/:id { monthly_target?, monthly_salary? }
+router.patch("/employees/:id", async (req, res, next) => {
+  try {
+    const { monthly_target, monthly_salary } = req.body;
+    if (monthly_target !== undefined && !(Number.isInteger(Number(monthly_target)) && Number(monthly_target) >= 0)) return res.status(400).json({ error: "Target must be a whole number, 0 or more" });
+    if (monthly_salary !== undefined && !(Number(monthly_salary) >= 0)) return res.status(400).json({ error: "Salary must be 0 or more" });
+    const emp = await get("SELECT 1 FROM users WHERE user_id = ? AND role = 'employee'", [req.params.id]);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    await run(
+      "UPDATE users SET monthly_target = COALESCE(?, monthly_target), monthly_salary = COALESCE(?, monthly_salary) WHERE user_id = ?",
+      [monthly_target ?? null, monthly_salary ?? null, req.params.id]
+    );
+    res.json(await get("SELECT user_id, full_name, monthly_target, monthly_salary FROM users WHERE user_id = ?", [req.params.id]));
+  } catch (e) { next(e); }
+});
+
+// ---------------- Tasks ----------------
+
+// GET /admin/tasks?employee_id=&status=
+router.get("/tasks", async (req, res, next) => {
+  try {
+    const { employee_id, status } = req.query;
+    let sql = `SELECT t.*, e.full_name as employee_name FROM tasks t JOIN users e ON e.user_id = t.assigned_to WHERE 1=1`;
+    const params = [];
+    if (employee_id) { sql += " AND t.assigned_to = ?"; params.push(employee_id); }
+    if (status) { sql += " AND t.status = ?"; params.push(status); }
+    sql += " ORDER BY (t.status = 'done'), t.due_date NULLS LAST, t.created_at DESC";
+    res.json(await all(sql, params));
+  } catch (e) { next(e); }
+});
+
+// POST /admin/tasks { assigned_to, title, description?, due_date?, priority? }
+router.post("/tasks", async (req, res, next) => {
+  try {
+    const { assigned_to, title, description, due_date, priority } = req.body;
+    if (!title || !String(title).trim()) return res.status(400).json({ error: "Task title is required" });
+    if (due_date && !isDate(due_date)) return res.status(400).json({ error: "Due date must be a valid date" });
+    if (priority && !["low", "normal", "high"].includes(priority)) return res.status(400).json({ error: "Invalid priority" });
+    const emp = await get("SELECT 1 FROM users WHERE user_id = ? AND role = 'employee' AND is_active = 1", [assigned_to]);
+    if (!emp) return res.status(400).json({ error: "Choose an active employee to assign this to" });
+    const r = await run(
+      "INSERT INTO tasks (assigned_to, assigned_by, title, description, due_date, priority) VALUES (?, ?, ?, ?, ?, ?) RETURNING task_id",
+      [assigned_to, req.auth.user_id, String(title).trim(), description ? String(description).trim() : null, due_date || null, priority || "normal"]
+    );
+    notifyUser(Number(assigned_to), { title: "New task assigned", body: `${String(title).trim()}${due_date ? ` — due ${due_date}` : ""}`, data: { type: "task" } });
+    res.json(await get("SELECT * FROM tasks WHERE task_id = ?", [r.lastInsertRowid]));
+  } catch (e) { next(e); }
+});
+
+// DELETE /admin/tasks/:id
+router.delete("/tasks/:id", async (req, res, next) => {
+  try {
+    const r = await run("DELETE FROM tasks WHERE task_id = ?", [req.params.id]);
+    if (!r.changes) return res.status(404).json({ error: "Task not found" });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+// ---------------- Attendance & leave ----------------
+
+// GET /admin/attendance?date=YYYY-MM-DD — every active employee's status for a day (default: today, IST)
+router.get("/attendance", async (req, res, next) => {
+  try {
+    const date = isDate(req.query.date) ? req.query.date : null;
+    const rows = await all(
+      `SELECT u.user_id, u.full_name, u.designation, a.check_in_at, a.check_out_at, a.in_lat, a.in_lng,
+              EXISTS(SELECT 1 FROM leave_requests l WHERE l.employee_id = u.user_id AND l.status = 'approved'
+                     AND COALESCE(?::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date) BETWEEN l.from_date AND l.to_date) as on_leave
+       FROM users u
+       LEFT JOIN attendance a ON a.employee_id = u.user_id AND a.work_date = COALESCE(?::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date)
+       WHERE u.role = 'employee' AND u.is_active = 1 ORDER BY u.full_name`,
+      [date, date]
+    );
+    res.json(rows.map((r) => ({ ...r, status: r.check_in_at ? (r.check_out_at ? "checked_out" : "checked_in") : (r.on_leave ? "on_leave" : "absent") })));
+  } catch (e) { next(e); }
+});
+
+// GET /admin/leaves?status=pending
+router.get("/leaves", async (req, res, next) => {
+  try {
+    const { status } = req.query;
+    let sql = `SELECT l.*, e.full_name as employee_name FROM leave_requests l JOIN users e ON e.user_id = l.employee_id WHERE 1=1`;
+    const params = [];
+    if (status) { sql += " AND l.status = ?"; params.push(status); }
+    sql += " ORDER BY (l.status = 'pending') DESC, l.created_at DESC";
+    res.json(await all(sql, params));
+  } catch (e) { next(e); }
+});
+
+// PATCH /admin/leaves/:id { status: approved|rejected, note? }
+router.patch("/leaves/:id", async (req, res, next) => {
+  try {
+    const { status, note } = req.body;
+    if (!["approved", "rejected"].includes(status)) return res.status(400).json({ error: "Status must be approved or rejected" });
+    const leave = await get("SELECT * FROM leave_requests WHERE leave_id = ?", [req.params.id]);
+    if (!leave) return res.status(404).json({ error: "Leave request not found" });
+    if (leave.status !== "pending") return res.status(400).json({ error: `This request was already ${leave.status}` });
+    await run("UPDATE leave_requests SET status = ?, decided_by = ?, decision_note = ? WHERE leave_id = ?", [status, req.auth.user_id, note || null, leave.leave_id]);
+    notifyUser(leave.employee_id, { title: `Leave ${status}`, body: `Your leave request is ${status}.${note ? ` Note: ${note}` : ""}`, data: { type: "leave" } });
+    res.json(await get("SELECT * FROM leave_requests WHERE leave_id = ?", [leave.leave_id]));
+  } catch (e) { next(e); }
+});
+
+// ---------------- Salary ----------------
+
+// GET /admin/salary-payments?month=YYYY-MM — payments recorded (all months if omitted)
+router.get("/salary-payments", async (req, res, next) => {
+  try {
+    const { month } = req.query;
+    let sql = "SELECT sp.*, e.full_name as employee_name FROM salary_payments sp JOIN users e ON e.user_id = sp.employee_id WHERE 1=1";
+    const params = [];
+    if (month) { sql += " AND sp.month = ?"; params.push(month); }
+    sql += " ORDER BY sp.month DESC, e.full_name";
+    res.json(await all(sql, params));
+  } catch (e) { next(e); }
+});
+
+// GET /admin/salary-preview?employee_id=&month= — what a payment for that month would be
+// (fixed salary + that month's earned incentive), for Admin to review before recording it.
+router.get("/salary-preview", async (req, res, next) => {
+  try {
+    const month = MONTH_RE.test(req.query.month || "") ? req.query.month : new Date().toISOString().slice(0, 7);
+    const emp = await get("SELECT user_id, full_name, monthly_salary FROM users WHERE user_id = ? AND role = 'employee'", [req.query.employee_id]);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    const inc = await monthlyIncentive(emp.user_id, month);
+    const paid = await get("SELECT 1 FROM salary_payments WHERE employee_id = ? AND month = ?", [emp.user_id, month]);
+    res.json({ employee: emp, month, base_amount: emp.monthly_salary, incentive_amount: inc.total, incentive: inc, already_paid: Boolean(paid) });
+  } catch (e) { next(e); }
+});
+
+// POST /admin/salary-payments { employee_id, month, base_amount?, incentive_amount?, deductions?, reference?, notes?, paid_on? }
+// Records that a month's salary was paid (outside the app — bank transfer/cash). Defaults
+// come from the preview above; one payment per employee per month.
+router.post("/salary-payments", async (req, res, next) => {
+  try {
+    const { employee_id, month, reference, notes, paid_on } = req.body;
+    if (!MONTH_RE.test(month || "")) return res.status(400).json({ error: "Month must look like 2026-09" });
+    if (paid_on && !isDate(paid_on)) return res.status(400).json({ error: "Paid-on date must be a valid date" });
+    const emp = await get("SELECT user_id, full_name, monthly_salary FROM users WHERE user_id = ? AND role = 'employee'", [employee_id]);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+
+    const inc = await monthlyIncentive(emp.user_id, month);
+    const base = req.body.base_amount !== undefined ? Number(req.body.base_amount) : emp.monthly_salary;
+    const incentive = req.body.incentive_amount !== undefined ? Number(req.body.incentive_amount) : inc.total;
+    const deductions = req.body.deductions !== undefined ? Number(req.body.deductions) : 0;
+    if ([base, incentive, deductions].some((n) => !Number.isFinite(n) || n < 0)) return res.status(400).json({ error: "Amounts must be 0 or more" });
+    const total = base + incentive - deductions;
+    if (total < 0) return res.status(400).json({ error: "Deductions can't exceed the amount due" });
+
+    const dupe = await get("SELECT 1 FROM salary_payments WHERE employee_id = ? AND month = ?", [emp.user_id, month]);
+    if (dupe) return res.status(409).json({ error: `${emp.full_name}'s ${month} salary is already recorded` });
+
+    const r = await run(
+      `INSERT INTO salary_payments (employee_id, month, base_amount, incentive_amount, deductions, total, paid_on, reference, notes, recorded_by)
+       VALUES (?, ?, ?, ?, ?, ?, COALESCE(?::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date), ?, ?, ?) RETURNING payment_id`,
+      [emp.user_id, month, base, incentive, deductions, total, paid_on || null, reference || null, notes || null, req.auth.user_id]
+    );
+    notifyUser(emp.user_id, { title: "Salary paid", body: `Your ${month} salary of ₹${total} has been recorded as paid.`, data: { type: "salary" } });
+    res.json(await get("SELECT * FROM salary_payments WHERE payment_id = ?", [r.lastInsertRowid]));
+  } catch (e) { next(e); }
+});
+
+// ---------------- GVCDA-delivery orders ----------------
+
+// GET /admin/gvcda-deliveries — open orders customers chose "GVCDA Delivery" for,
+// so whoever runs GVCDA's own delivery can see what needs collecting and dropping off.
+router.get("/gvcda-deliveries", async (req, res, next) => {
+  try {
+    res.json(await all(
+      `SELECT o.order_id, o.status, o.order_total, o.payment_method, o.delivery_address, o.delivery_phone, o.placed_at,
+              r.business_name, r.address as pickup_address, r.phone as retailer_phone, u.full_name as member_name
+       FROM orders o JOIN retailers r ON r.retailer_id = o.retailer_id JOIN users u ON u.user_id = o.member_id
+       WHERE o.delivery_method = 'gvcda_delivery' AND o.status IN ('placed','accepted')
+       ORDER BY o.placed_at`
+    ));
   } catch (e) { next(e); }
 });
 
@@ -90,7 +271,7 @@ router.get("/employees", async (req, res, next) => {
 router.get("/complaints", async (req, res, next) => {
   try {
     const rows = await all(
-      `SELECT c.*, u.full_name as raised_by_name, r.business_name as against_retailer_name
+      `SELECT c.*, u.full_name as raised_by_name, u.role as raised_by_role, u.phone as raised_by_phone, r.business_name as against_retailer_name
        FROM complaints c
        JOIN users u ON u.user_id = c.raised_by
        LEFT JOIN retailers r ON r.retailer_id = c.against_retailer_id
@@ -202,7 +383,7 @@ router.post("/broadcasts", async (req, res, next) => {
 router.get("/users", async (req, res, next) => {
   try {
     const rows = await all(
-      `SELECT u.user_id, u.full_name, u.phone, u.role, u.designation, u.is_active, u.created_at,
+      `SELECT u.user_id, u.full_name, u.phone, u.email, u.role, u.designation, u.is_active, u.created_at,
               d.name as district_name, m.name as mandal_name
        FROM users u
        LEFT JOIN districts d ON d.district_id = u.territory_district_id
@@ -226,8 +407,10 @@ const USER_PHONE_RE = /^\d{10}$/;
 // retailer would see the first time they log in.
 router.post("/users", async (req, res, next) => {
   try {
-    const { phone, full_name, role, password, designation, territory_district_id, territory_mandal_id, village_id } = req.body;
+    const { phone, full_name, role, password, designation, territory_district_id, territory_mandal_id, village_id, email, monthly_salary } = req.body;
     if (!phone || !USER_PHONE_RE.test(phone)) return res.status(400).json({ error: "Valid 10-digit phone number required" });
+    if (email && !isEmail(email)) return res.status(400).json({ error: "Enter a valid email address" });
+    if (monthly_salary !== undefined && monthly_salary !== "" && !(Number(monthly_salary) >= 0)) return res.status(400).json({ error: "Salary must be 0 or more" });
     if (!full_name) return res.status(400).json({ error: "full_name required" });
     if (!["member", "employee", "retailer", "admin"].includes(role)) return res.status(400).json({ error: "Invalid role" });
     if (role === "employee" && !designation) return res.status(400).json({ error: "designation required for an employee account" });
@@ -238,9 +421,10 @@ router.post("/users", async (req, res, next) => {
 
     const password_hash = await bcrypt.hash(password, 10);
     const result = await run(
-      `INSERT INTO users (phone, password_hash, full_name, role, village_id, designation, territory_district_id, territory_mandal_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING user_id`,
-      [phone, password_hash, full_name, role, village_id || null, role === "employee" ? designation : null, territory_district_id || null, territory_mandal_id || null]
+      `INSERT INTO users (phone, password_hash, full_name, role, village_id, designation, territory_district_id, territory_mandal_id, email, monthly_salary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING user_id`,
+      [phone, password_hash, full_name, role, village_id || null, role === "employee" ? designation : null, territory_district_id || null, territory_mandal_id || null,
+       email ? email.trim().toLowerCase() : null, role === "employee" && monthly_salary ? Number(monthly_salary) : 0]
     );
     await run("INSERT INTO user_roles (user_id, role) VALUES (?, ?) ON CONFLICT DO NOTHING", [result.lastInsertRowid, role]);
 

@@ -5,10 +5,22 @@ const { requireAuth } = require("../middleware/auth");
 const paymentRequests = require("../lib/paymentRequests");
 const { uploadPhotos, uploadSingleImage, saveFiles, deleteFile } = require("../lib/uploads");
 const broadcasts = require("../lib/broadcasts");
-const { sendPush } = require("../lib/push");
-const { recomputeRating } = require("../lib/reviews");
+const { notifyUser } = require("../lib/notify");
+const { restockOrder } = require("../lib/inventory");
+const { DELIVERY_METHODS, parseDeliveryMethods } = require("../lib/retailerPublic");
 
 router.use(requireAuth);
+
+const LOW_STOCK_THRESHOLD = 5;
+
+// Shared shape for stock input: blank/null = "don't track", otherwise a whole number >= 0.
+function parseStock(v) {
+  if (v === undefined) return { ok: true, skip: true };
+  if (v === null || v === "") return { ok: true, value: null };
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0) return { ok: false };
+  return { ok: true, value: n };
+}
 
 // GET /retailer/broadcasts — announcements targeted at this retailer's district/mandal, or all of Telangana
 router.get("/broadcasts", async (req, res, next) => {
@@ -46,20 +58,28 @@ async function withRetailer(req, res, next) {
 }
 
 // GET /retailer/me — status, whether approved yet
-router.get("/me", withRetailer, (req, res) => res.json({ retailer: req.retailer }));
+router.get("/me", withRetailer, (req, res) => res.json({ retailer: { ...req.retailer, delivery_methods: parseDeliveryMethods(req.retailer.delivery_methods) } }));
 
 // GET /retailer/products
 router.get("/products", withRetailer, async (req, res, next) => {
   try { res.json(await all("SELECT * FROM products WHERE retailer_id = ?", [req.retailer.retailer_id])); } catch (e) { next(e); }
 });
 
-// POST /retailer/products { name, price }
+// POST /retailer/products { name, price, stock?, item_type? }
+// item_type: 'product' (default) or 'service' (booked for a time slot, no stock).
 router.post("/products", withRetailer, async (req, res, next) => {
   try {
-    const { name, price } = req.body;
+    const { name, price, item_type } = req.body;
     if (!name || price === undefined || price === null) return res.status(400).json({ error: "name and price required" });
     if (!(Number(price) > 0)) return res.status(400).json({ error: "price must be greater than 0" });
-    const result = await run("INSERT INTO products (retailer_id, name, price) VALUES (?, ?, ?) RETURNING product_id", [req.retailer.retailer_id, name, price]);
+    const type = item_type || "product";
+    if (!["product", "service"].includes(type)) return res.status(400).json({ error: "item_type must be product or service" });
+    const stock = parseStock(req.body.stock);
+    if (!stock.ok) return res.status(400).json({ error: "Stock must be a whole number, 0 or more" });
+    const result = await run(
+      "INSERT INTO products (retailer_id, name, price, item_type, stock) VALUES (?, ?, ?, ?, ?) RETURNING product_id",
+      [req.retailer.retailer_id, name, price, type, type === "service" || stock.skip ? null : stock.value]
+    );
     res.json(await get("SELECT * FROM products WHERE product_id = ?", [result.lastInsertRowid]));
   } catch (e) { next(e); }
 });
@@ -77,13 +97,18 @@ router.get("/orders", withRetailer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /retailer/orders/:id — with line items
+// GET /retailer/orders/:id — with line items, the customer, and delivery/payment details
 router.get("/orders/:id", withRetailer, async (req, res, next) => {
   try {
-    const order = await get("SELECT * FROM orders WHERE order_id = ? AND retailer_id = ?", [req.params.id, req.retailer.retailer_id]);
+    const order = await get(
+      `SELECT o.*, u.full_name as member_name, u.phone as member_phone
+       FROM orders o JOIN users u ON u.user_id = o.member_id
+       WHERE o.order_id = ? AND o.retailer_id = ?`,
+      [req.params.id, req.retailer.retailer_id]
+    );
     if (!order) return res.status(404).json({ error: "Order not found" });
     const items = await all(
-      `SELECT oi.*, p.name FROM order_items oi JOIN products p ON p.product_id = oi.product_id WHERE oi.order_id = ?`,
+      `SELECT oi.*, p.name, p.item_type FROM order_items oi JOIN products p ON p.product_id = oi.product_id WHERE oi.order_id = ?`,
       [order.order_id]
     );
     res.json({ order, items });
@@ -91,6 +116,8 @@ router.get("/orders/:id", withRetailer, async (req, res, next) => {
 });
 
 // PATCH /retailer/orders/:id { status: accepted|rejected|fulfilled }
+// Finished orders (fulfilled/rejected/cancelled) can't be changed again. A UPI order
+// can't be fulfilled until the retailer has confirmed the money actually arrived.
 router.patch("/orders/:id", withRetailer, async (req, res, next) => {
   try {
     const { status } = req.body;
@@ -99,20 +126,155 @@ router.patch("/orders/:id", withRetailer, async (req, res, next) => {
 
     const order = await get("SELECT * FROM orders WHERE order_id = ? AND retailer_id = ?", [req.params.id, req.retailer.retailer_id]);
     if (!order) return res.status(404).json({ error: "Order not found" });
+    if (["fulfilled", "rejected", "cancelled"].includes(order.status)) return res.status(400).json({ error: `This order is already ${order.status}` });
+    if (status === "fulfilled" && order.payment_method === "upi" && order.payment_status !== "paid") {
+      return res.status(400).json({ error: "Confirm the customer's UPI payment before marking this order delivered" });
+    }
 
     const fulfilledAt = status === "fulfilled" ? new Date().toISOString() : order.fulfilled_at;
-    await run("UPDATE orders SET status = ?, fulfilled_at = ? WHERE order_id = ?", [status, fulfilledAt, order.order_id]);
+    // Cash on Delivery is settled the moment the order is handed over.
+    const paymentStatus = status === "fulfilled" && order.payment_method === "cod" ? "paid" : order.payment_status;
+    await run("UPDATE orders SET status = ?, fulfilled_at = ?, payment_status = ? WHERE order_id = ?", [status, fulfilledAt, paymentStatus, order.order_id]);
+    if (status === "rejected") await restockOrder(order.order_id);
 
     const STATUS_MESSAGE = {
       accepted: "Your order was accepted and is being prepared.",
       rejected: "Your order was rejected by the retailer.",
       fulfilled: "Your order has been delivered!",
     };
-    get("SELECT push_token FROM users WHERE user_id = ?", [order.member_id])
-      .then((u) => sendPush([u?.push_token], { title: `Order #${order.order_id} update`, body: STATUS_MESSAGE[status], data: { type: "order_status", order_id: order.order_id } }))
-      .catch((e) => console.error("Order status push failed:", e.message));
+    notifyUser(order.member_id, { title: `Order #${order.order_id} update`, body: STATUS_MESSAGE[status], data: { type: "order_status", order_id: order.order_id } });
 
     res.json(await get("SELECT * FROM orders WHERE order_id = ?", [order.order_id]));
+  } catch (e) { next(e); }
+});
+
+// PATCH /retailer/orders/:id/payment { received: boolean } — confirm (or un-confirm,
+// if the UTR turned out not to match) a UPI payment against the retailer's own bank/UPI app.
+router.patch("/orders/:id/payment", withRetailer, async (req, res, next) => {
+  try {
+    const order = await get("SELECT * FROM orders WHERE order_id = ? AND retailer_id = ?", [req.params.id, req.retailer.retailer_id]);
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (order.payment_method !== "upi") return res.status(400).json({ error: "This is a Cash on Delivery order" });
+    if (["cancelled", "rejected"].includes(order.status)) return res.status(400).json({ error: "This order is closed" });
+
+    const received = Boolean(req.body.received);
+    await run("UPDATE orders SET payment_status = ? WHERE order_id = ?", [received ? "paid" : "pending", order.order_id]);
+    notifyUser(order.member_id, {
+      title: `Order #${order.order_id} payment`,
+      body: received ? "The retailer confirmed your UPI payment. Thank you!" : "The retailer couldn't match your UPI payment. Please re-check the UTR and submit again.",
+      data: { type: "order_payment", order_id: order.order_id },
+    });
+    res.json(await get("SELECT * FROM orders WHERE order_id = ?", [order.order_id]));
+  } catch (e) { next(e); }
+});
+
+// GET /retailer/customers — everyone who's ordered here, with repeat-business stats.
+router.get("/customers", withRetailer, async (req, res, next) => {
+  try {
+    res.json(await all(
+      `SELECT u.user_id as member_id, u.full_name, u.phone,
+              COUNT(o.order_id) as order_count,
+              COUNT(o.order_id) FILTER (WHERE o.status = 'fulfilled') as fulfilled_count,
+              COALESCE(SUM(o.order_total) FILTER (WHERE o.status = 'fulfilled'), 0) as total_spent,
+              MAX(o.placed_at) as last_order_at,
+              (SELECT ROUND(AVG(rv.rating)::numeric, 1) FROM reviews rv WHERE rv.retailer_id = o.retailer_id AND rv.member_id = u.user_id) as avg_rating
+       FROM orders o JOIN users u ON u.user_id = o.member_id
+       WHERE o.retailer_id = ?
+       GROUP BY u.user_id, u.full_name, u.phone, o.retailer_id
+       ORDER BY MAX(o.placed_at) DESC`,
+      [req.retailer.retailer_id]
+    ));
+  } catch (e) { next(e); }
+});
+
+// GET /retailer/customers/:memberId — one customer's history with this shop
+router.get("/customers/:memberId", withRetailer, async (req, res, next) => {
+  try {
+    const customer = await get("SELECT user_id as member_id, full_name, phone, address FROM users WHERE user_id = ?", [req.params.memberId]);
+    const orders = await all(
+      "SELECT * FROM orders WHERE retailer_id = ? AND member_id = ? ORDER BY placed_at DESC",
+      [req.retailer.retailer_id, req.params.memberId]
+    );
+    if (!customer || !orders.length) return res.status(404).json({ error: "Customer not found" });
+    const reviews = await all(
+      "SELECT rating, comment, created_at, order_id FROM reviews WHERE retailer_id = ? AND member_id = ? ORDER BY created_at DESC",
+      [req.retailer.retailer_id, req.params.memberId]
+    );
+    res.json({ customer, orders, reviews });
+  } catch (e) { next(e); }
+});
+
+// GET /retailer/reports?from=YYYY-MM-DD&to=YYYY-MM-DD — sales, order, payment and stock
+// reports in one call (defaults to the last 30 days).
+router.get("/reports", withRetailer, async (req, res, next) => {
+  try {
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || "") ? req.query.to : new Date().toISOString().slice(0, 10);
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || "") ? req.query.from : new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+    const rid = req.retailer.retailer_id;
+    const range = "o.retailer_id = ? AND o.placed_at::date BETWEEN ?::date AND ?::date";
+
+    const sales = await get(
+      `SELECT COALESCE(SUM(o.order_total),0) as gross, COALESCE(SUM(o.commission_amt),0) as commission,
+              COALESCE(SUM(o.payout_amt),0) as net, COUNT(*) as order_count
+       FROM orders o WHERE ${range} AND o.status = 'fulfilled'`, [rid, from, to]
+    );
+    const byStatusRows = await all(`SELECT o.status, COUNT(*) as count FROM orders o WHERE ${range} GROUP BY o.status`, [rid, from, to]);
+    const orders_by_status = { placed: 0, accepted: 0, fulfilled: 0, rejected: 0, cancelled: 0 };
+    byStatusRows.forEach((r) => { orders_by_status[r.status] = Number(r.count); });
+
+    const top_products = await all(
+      `SELECT p.name, SUM(oi.quantity) as quantity, SUM(oi.line_total) as revenue
+       FROM order_items oi JOIN orders o ON o.order_id = oi.order_id JOIN products p ON p.product_id = oi.product_id
+       WHERE ${range} AND o.status = 'fulfilled'
+       GROUP BY p.product_id, p.name ORDER BY revenue DESC LIMIT 5`, [rid, from, to]
+    );
+
+    const payments = await get(
+      `SELECT COALESCE(SUM(o.order_total) FILTER (WHERE o.payment_method = 'cod'),0) as cod_total,
+              COALESCE(SUM(o.order_total) FILTER (WHERE o.payment_method = 'upi'),0) as upi_total,
+              COALESCE(SUM(o.commission_amt) FILTER (WHERE o.commission_settled = 0),0) as commission_owed,
+              COALESCE(SUM(o.commission_amt) FILTER (WHERE o.commission_settled = 1),0) as commission_settled,
+              COUNT(*) FILTER (WHERE o.payment_method = 'upi' AND o.payment_status = 'submitted' AND o.status NOT IN ('cancelled','rejected')) as upi_awaiting_confirmation
+       FROM orders o WHERE ${range} AND o.status = 'fulfilled'`, [rid, from, to]
+    );
+
+    const stockRows = await all("SELECT product_id, name, stock FROM products WHERE retailer_id = ? AND stock IS NOT NULL AND item_type = 'product' ORDER BY stock, name", [rid]);
+    const stock = {
+      tracked_count: stockRows.length,
+      threshold: LOW_STOCK_THRESHOLD,
+      out_of_stock: stockRows.filter((s) => s.stock === 0),
+      low_stock: stockRows.filter((s) => s.stock > 0 && s.stock <= LOW_STOCK_THRESHOLD),
+    };
+
+    res.json({ from, to, sales, orders_by_status, top_products, payments, stock });
+  } catch (e) { next(e); }
+});
+
+// GET /retailer/support · POST /retailer/support { category?, description } — the retailer's
+// own help channel; lands in Admin's Complaint Desk alongside customer complaints.
+router.get("/support", async (req, res, next) => {
+  try { res.json(await all("SELECT * FROM complaints WHERE raised_by = ? ORDER BY created_at DESC", [req.auth.user_id])); } catch (e) { next(e); }
+});
+router.post("/support", async (req, res, next) => {
+  try {
+    const { category, description } = req.body;
+    if (!description || !description.trim()) return res.status(400).json({ error: "Please describe the issue" });
+    const result = await run(
+      "INSERT INTO complaints (raised_by, category, description) VALUES (?, ?, ?) RETURNING complaint_id",
+      [req.auth.user_id, category || "Retailer support", description.trim()]
+    );
+    res.json({ complaint_id: result.lastInsertRowid });
+  } catch (e) { next(e); }
+});
+
+// GET /retailer/stock — every tracked product, lowest first (drives the Products tab's stock view)
+router.get("/stock", withRetailer, async (req, res, next) => {
+  try {
+    const rows = await all(
+      "SELECT product_id, name, stock FROM products WHERE retailer_id = ? AND stock IS NOT NULL AND item_type = 'product' ORDER BY stock, name",
+      [req.retailer.retailer_id]
+    );
+    res.json({ threshold: LOW_STOCK_THRESHOLD, products: rows });
   } catch (e) { next(e); }
 });
 
@@ -198,16 +360,21 @@ router.get("/commission/requests", withRetailer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PATCH /retailer/products/:id { name, price, is_available }
+// PATCH /retailer/products/:id { name, price, is_available, stock }
+// stock: a whole number to (re)set the live count, null/"" to stop tracking it.
 router.patch("/products/:id", withRetailer, async (req, res, next) => {
   try {
     const { name, price, is_available } = req.body;
     if (price !== undefined && price !== null && !(Number(price) > 0)) return res.status(400).json({ error: "price must be greater than 0" });
+    const stock = parseStock(req.body.stock);
+    if (!stock.ok) return res.status(400).json({ error: "Stock must be a whole number, 0 or more" });
     const product = await get("SELECT * FROM products WHERE product_id = ? AND retailer_id = ?", [req.params.id, req.retailer.retailer_id]);
     if (!product) return res.status(404).json({ error: "Product not found" });
+    const changeStock = !stock.skip && product.item_type !== "service";
     await run(
-      "UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), is_available = COALESCE(?, is_available) WHERE product_id = ?",
-      [name, price, is_available === undefined ? undefined : (is_available ? 1 : 0), req.params.id]
+      `UPDATE products SET name = COALESCE(?, name), price = COALESCE(?, price), is_available = COALESCE(?, is_available),
+       stock = CASE WHEN ?::boolean THEN ?::integer ELSE stock END WHERE product_id = ?`,
+      [name, price, is_available === undefined ? undefined : (is_available ? 1 : 0), changeStock, changeStock ? stock.value : null, req.params.id]
     );
     res.json(await get("SELECT * FROM products WHERE product_id = ?", [req.params.id]));
   } catch (e) { next(e); }
@@ -223,18 +390,30 @@ router.delete("/products/:id", withRetailer, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PATCH /retailer/profile { address, hours, description, phone, bank_account, bank_ifsc, upi_id }
+// PATCH /retailer/profile { address, hours, description, phone, bank_account, bank_ifsc, upi_id, delivery_methods }
+// delivery_methods: array of pickup | self_delivery | gvcda_delivery — what customers may pick at checkout.
 router.patch("/profile", withRetailer, async (req, res, next) => {
   try {
     const { address, hours, description, phone, bank_account, bank_ifsc, upi_id } = req.body;
+    let deliveryMethods = null;
+    if (req.body.delivery_methods !== undefined) {
+      const list = Array.isArray(req.body.delivery_methods) ? req.body.delivery_methods : String(req.body.delivery_methods).split(",");
+      const clean = [...new Set(list.map((s) => String(s).trim()))];
+      if (!clean.length || clean.some((m) => !DELIVERY_METHODS.includes(m))) {
+        return res.status(400).json({ error: "Choose at least one valid delivery option" });
+      }
+      deliveryMethods = clean.join(",");
+    }
     await run(
       `UPDATE retailers SET address = COALESCE(?, address), hours = COALESCE(?, hours),
        description = COALESCE(?, description), phone = COALESCE(?, phone),
-       bank_account = COALESCE(?, bank_account), bank_ifsc = COALESCE(?, bank_ifsc), upi_id = COALESCE(?, upi_id)
+       bank_account = COALESCE(?, bank_account), bank_ifsc = COALESCE(?, bank_ifsc), upi_id = COALESCE(?, upi_id),
+       delivery_methods = COALESCE(?, delivery_methods)
        WHERE retailer_id = ?`,
-      [address, hours, description, phone, bank_account, bank_ifsc, upi_id, req.retailer.retailer_id]
+      [address, hours, description, phone, bank_account, bank_ifsc, upi_id, deliveryMethods, req.retailer.retailer_id]
     );
-    res.json({ retailer: await get("SELECT * FROM retailers WHERE retailer_id = ?", [req.retailer.retailer_id]) });
+    const updated = await get("SELECT * FROM retailers WHERE retailer_id = ?", [req.retailer.retailer_id]);
+    res.json({ retailer: { ...updated, delivery_methods: parseDeliveryMethods(updated.delivery_methods) } });
   } catch (e) { next(e); }
 });
 

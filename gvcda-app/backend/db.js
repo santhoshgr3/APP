@@ -12,7 +12,8 @@ if (!process.env.DATABASE_URL) {
 // model (same trust boundary as any other managed DB connection string).
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  // DATABASE_SSL=false is for a throwaway local Postgres in development only.
+  ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
 });
 
 // Every route file used to call better-sqlite3's synchronous db.prepare(sql).get/
@@ -162,18 +163,6 @@ CREATE TABLE IF NOT EXISTS retailers (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- One review per fulfilled order, so ratings can't be spammed without ever having
--- bought anything. retailers.rating_avg is recomputed after every insert.
-CREATE TABLE IF NOT EXISTS reviews (
-  review_id SERIAL PRIMARY KEY,
-  retailer_id INTEGER NOT NULL REFERENCES retailers(retailer_id),
-  member_id INTEGER NOT NULL REFERENCES users(user_id),
-  order_id INTEGER NOT NULL UNIQUE REFERENCES orders(order_id),
-  rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
-  comment TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 -- Storefront photos for a retailer listing (List Retailer / Business Registration
 -- screens call for "photos", plural — Admin's approval queue and the member-facing
 -- profile both show them). is_primary marks the one used as the listing's cover
@@ -238,7 +227,7 @@ CREATE TABLE IF NOT EXISTS orders (
   member_id INTEGER NOT NULL REFERENCES users(user_id),
   retailer_id INTEGER NOT NULL REFERENCES retailers(retailer_id),
   status TEXT NOT NULL DEFAULT 'placed' CHECK(status IN ('placed','accepted','rejected','fulfilled','cancelled')),
-  payment_method TEXT NOT NULL DEFAULT 'cod' CHECK(payment_method IN ('cod')),
+  payment_method TEXT NOT NULL DEFAULT 'cod' CHECK(payment_method IN ('cod','upi')),
   order_total REAL NOT NULL,
   commission_pct REAL NOT NULL,
   commission_amt REAL NOT NULL,     -- what the retailer owes GVCDA (COD: retailer collects order_total in cash)
@@ -263,6 +252,19 @@ CREATE TABLE IF NOT EXISTS order_items (
   quantity INTEGER NOT NULL DEFAULT 1,
   unit_price REAL NOT NULL,
   line_total REAL NOT NULL
+);
+
+-- One review per fulfilled order, so ratings can't be spammed without ever having
+-- bought anything. retailers.rating_avg is recomputed after every insert.
+-- (Declared after orders because it references it — a fresh database needs that order.)
+CREATE TABLE IF NOT EXISTS reviews (
+  review_id SERIAL PRIMARY KEY,
+  retailer_id INTEGER NOT NULL REFERENCES retailers(retailer_id),
+  member_id INTEGER NOT NULL REFERENCES users(user_id),
+  order_id INTEGER NOT NULL UNIQUE REFERENCES orders(order_id),
+  rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -318,6 +320,79 @@ CREATE TABLE IF NOT EXISTS broadcasts (
   status TEXT NOT NULL DEFAULT 'sent' CHECK(status IN ('draft','sent')),
   recipient_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- Retailer: inventory, services, delivery options ----
+-- stock NULL means "not tracked" (unlimited / made-to-order); a number is a live count.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS item_type TEXT NOT NULL DEFAULT 'product';   -- product | service
+ALTER TABLE retailers ADD COLUMN IF NOT EXISTS delivery_methods TEXT NOT NULL DEFAULT 'pickup,self_delivery';  -- csv of pickup|self_delivery|gvcda_delivery
+
+-- ---- Orders: delivery method, UPI payment, service bookings ----
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_method TEXT NOT NULL DEFAULT 'self_delivery';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'pending';   -- pending | submitted | paid
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_utr TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_for TEXT;   -- service bookings: local date-time the customer wants (YYYY-MM-DDTHH:mm)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_notes TEXT;
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;
+ALTER TABLE orders ADD CONSTRAINT orders_payment_method_check CHECK(payment_method IN ('cod','upi'));
+
+-- ---- Users: email, profile photo (employee ID card / avatars), employee salary ----
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_filename TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_salary REAL NOT NULL DEFAULT 0;
+
+-- ---- Employee: attendance, leave, tasks, salary ledger ----
+CREATE TABLE IF NOT EXISTS attendance (
+  attendance_id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES users(user_id),
+  work_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  check_in_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  check_out_at TIMESTAMPTZ,
+  in_lat REAL, in_lng REAL, out_lat REAL, out_lng REAL,
+  UNIQUE(employee_id, work_date)
+);
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+  leave_id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES users(user_id),
+  from_date DATE NOT NULL,
+  to_date DATE NOT NULL,
+  leave_type TEXT NOT NULL DEFAULT 'casual' CHECK(leave_type IN ('casual','sick','earned','unpaid')),
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+  decided_by INTEGER REFERENCES users(user_id),
+  decision_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  task_id SERIAL PRIMARY KEY,
+  assigned_to INTEGER NOT NULL REFERENCES users(user_id),
+  assigned_by INTEGER REFERENCES users(user_id),
+  title TEXT NOT NULL,
+  description TEXT,
+  due_date DATE,
+  priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','done')),
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS salary_payments (
+  payment_id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES users(user_id),
+  month TEXT NOT NULL,                      -- YYYY-MM
+  base_amount REAL NOT NULL,
+  incentive_amount REAL NOT NULL DEFAULT 0,
+  deductions REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL,
+  paid_on DATE NOT NULL DEFAULT CURRENT_DATE,
+  reference TEXT,
+  notes TEXT,
+  recorded_by INTEGER REFERENCES users(user_id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(employee_id, month)
 );
 `);
 }
